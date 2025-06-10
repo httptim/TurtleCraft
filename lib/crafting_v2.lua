@@ -111,13 +111,16 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
     local waitStart = os.clock()
     local maxWaitTime = 10  -- 10 seconds for items to arrive
     
+    local lastStatus = ""
     while os.clock() - waitStart < maxWaitTime do
         -- Check current inventory
         local currentInventory = {}
+        local debugSlots = "Slot contents: "
         for slot = 1, 16 do
             local item = turtle.getItemDetail(slot)
             if item then
                 currentInventory[item.name] = (currentInventory[item.name] or 0) + item.count
+                debugSlots = debugSlots .. "[" .. slot .. ":" .. item.name .. "x" .. item.count .. "] "
             end
         end
         
@@ -134,14 +137,17 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
         
         if allItemsPresent then
             print(status)
+            print(debugSlots)
             print("\nAll items have arrived!")
             break
         end
         
-        -- Show progress every second (but only if status changed)
+        -- Show progress every second (but only if status changed or first time)
         local elapsed = math.floor(os.clock() - waitStart)
-        if elapsed ~= math.floor(os.clock() - waitStart - 0.1) then
+        if status ~= lastStatus or elapsed == 0 then
             print(status .. " (elapsed: " .. elapsed .. "s)")
+            print(debugSlots)
+            lastStatus = status
         end
         
         sleep(0.1)
