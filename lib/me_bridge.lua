@@ -151,6 +151,18 @@ function me_bridge.exportItemToPeripheral(itemName, count, peripheralName)
         return nil, tostring(result)
     end
     
+    -- Handle different return types from the ME Bridge
+    if result == nil then
+        -- Some versions might return nil on success, assume it worked
+        result = count
+    elseif type(result) == "boolean" and result then
+        -- Some versions might return true on success
+        result = count
+    elseif type(result) ~= "number" then
+        -- If it's not a number, something went wrong
+        return nil, "Unexpected return type: " .. type(result)
+    end
+    
     if config.DEBUG then
         print("[ME Bridge] Exported " .. tostring(result) .. "x " .. itemName .. " to " .. peripheralName)
     end
@@ -172,6 +184,18 @@ function me_bridge.importItemFromPeripheral(itemName, count, peripheralName)
     local ok, result = pcall(bridge.importItemFromPeripheral, bridge, item, peripheralName)
     if not ok then
         return nil, tostring(result)
+    end
+    
+    -- Handle different return types from the ME Bridge
+    if result == nil then
+        -- Some versions might return nil on success, assume it worked
+        result = count
+    elseif type(result) == "boolean" and result then
+        -- Some versions might return true on success
+        result = count
+    elseif type(result) ~= "number" then
+        -- If it's not a number, something went wrong
+        return nil, "Unexpected return type: " .. type(result)
     end
     
     if config.DEBUG then

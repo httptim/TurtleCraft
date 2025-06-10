@@ -209,7 +209,7 @@ local function handleMessage(sender, message)
         -- Export items from ME to turtle using peripheral name
         local exported, err = me_bridge.exportItemToPeripheral(itemName, count, turtlePeripheral)
         
-        if exported > 0 then
+        if exported and exported > 0 then
             network.send(sender, "ITEMS_RESPONSE", {
                 success = true,
                 item = itemName,
@@ -222,6 +222,7 @@ local function handleMessage(sender, message)
                 error = err or "Failed to export items"
             })
             print("[Jobs] Failed to export: " .. tostring(err))
+            print("[Jobs] Item: " .. itemName .. ", Count: " .. count .. ", Peripheral: " .. turtlePeripheral)
         end
         
     elseif message.type == "DEPOSIT_ITEMS" then
