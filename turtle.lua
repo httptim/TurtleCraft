@@ -137,9 +137,9 @@ local function handleMessage(sender, message)
             })
             
             -- Perform the crafting
-            local crafting = dofile("lib/crafting.lua")
+            local crafting = dofile("lib/crafting_v2.lua")
             local success, crafted, deposited = crafting.performCraft(
-                turtle, network, jobsComputerID,
+                network, jobsComputerID,
                 job.recipe, job.quantity
             )
             
@@ -280,12 +280,12 @@ local function craftItems()
         end
     end
     
-    print("\n[Turtle] Requesting craft job...")
+    print("\n[Turtle] Starting craft job...")
     
-    -- For now, just do local crafting
-    local crafting = dofile("lib/crafting.lua")
+    -- Use the new crafting system
+    local crafting = dofile("lib/crafting_v2.lua")
     local success, crafted, deposited = crafting.performCraft(
-        turtle, network, jobsComputerID,
+        network, jobsComputerID,
         recipeName, quantity
     )
     

@@ -114,45 +114,62 @@ local function requestCrafting()
     print("================")
     print()
     
-    -- Simple test: request to craft sticks
-    print("Available test recipes:")
-    print("1. Sticks (4x from 2 planks)")
-    print("2. Planks (4x from 1 log)")
-    print("3. Chest (1x from 8 planks)")
-    print("4. Furnace (1x from 8 cobblestone)")
-    print("0. Cancel")
+    -- Load recipes to show nice menu
+    local recipes = dofile("recipes.lua")
+    local recipeList = {}
+    local index = 1
+    
+    print("Available recipes:")
+    for name, recipe in pairs(recipes) do
+        if type(recipe) == "table" and recipe.result then
+            recipeList[index] = {name = name, recipe = recipe}
+            print(index .. ". " .. name .. " (x" .. recipe.count .. ")")
+            index = index + 1
+            if index > 10 then  -- Limit display
+                print("... and more")
+                break
+            end
+        end
+    end
+    
     print()
-    write("Choice: ")
-    
+    print("Enter recipe number (or 0 to cancel):")
+    write("> ")
     local choice = tonumber(read())
-    if not choice or choice == 0 then return end
     
-    local recipes = {
-        {name = "minecraft:stick", count = 4},
-        {name = "minecraft:oak_planks", count = 4},
-        {name = "minecraft:chest", count = 1},
-        {name = "minecraft:furnace", count = 1}
-    }
+    if not choice or choice == 0 or not recipeList[choice] then
+        return
+    end
     
-    if not recipes[choice] then return end
+    local selected = recipeList[choice]
+    local recipeName = selected.name
+    local recipe = selected.recipe
     
-    local recipe = recipes[choice]
-    print("\nRecipe yields: " .. recipe.count .. " per craft")
-    print("How many " .. recipe.name .. " do you want total?")
+    print()
+    print("Recipe yields: " .. recipe.count .. " per craft")
+    print("How many " .. recipeName .. " do you want total?")
+    print("(Will craft in batches of " .. recipe.count .. ")")
     write("> ")
     local quantity = tonumber(read()) or recipe.count
     
-    -- Show what will actually be crafted
-    local batches = math.ceil(quantity / recipe.count)
-    local actualOutput = batches * recipe.count
+    -- Calculate batches needed
+    local batchesNeeded = math.ceil(quantity / recipe.count)
+    local actualOutput = batchesNeeded * recipe.count
+    
     if actualOutput > quantity then
-        print("\nNote: Will craft " .. batches .. " batch(es) = " .. actualOutput .. " items")
+        print()
+        print("Note: Will craft " .. batchesNeeded .. " batch(es) = " .. actualOutput .. " items")
+        print("Continue? (Y/N)")
+        local confirm = read()
+        if string.upper(confirm) ~= "Y" then
+            return
+        end
     end
     
-    -- For now, just send a test message
-    print("\n[Main] Requesting craft of " .. quantity .. "x " .. recipe.name)
+    -- Send craft request
+    print("\n[Main] Requesting craft of " .. quantity .. "x " .. recipeName)
     network.send(jobsComputerID, "CRAFT_REQUEST", {
-        recipe = recipe.name,
+        recipe = recipeName,
         quantity = quantity
     })
     

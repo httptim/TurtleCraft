@@ -355,6 +355,62 @@ local function handleMessage(sender, message)
             })
         end
         
+    elseif message.type == "PULL_ITEM" then
+        -- Turtle wants us to pull an item from it
+        local slot = message.data.slot
+        local itemName = message.data.item
+        local count = message.data.count
+        
+        -- Find turtle's peripheral name
+        local turtlePeripheral = nil
+        for _, turtle in ipairs(turtles) do
+            if turtle.id == sender and turtle.peripheralName then
+                turtlePeripheral = turtle.peripheralName
+                break
+            end
+        end
+        
+        if not turtlePeripheral then
+            for peripheral, id in pairs(wiredTurtles) do
+                if id == sender then
+                    turtlePeripheral = peripheral
+                    break
+                end
+            end
+        end
+        
+        if not turtlePeripheral then
+            network.send(sender, "PULL_RESPONSE", {
+                success = false,
+                error = "Turtle peripheral not found"
+            })
+            return
+        end
+        
+        -- Pull the item from turtle to ME
+        if me_bridge.isConnected() then
+            local imported, err = me_bridge.importItemFromPeripheral(itemName, count, turtlePeripheral)
+            if imported and imported > 0 then
+                network.send(sender, "PULL_RESPONSE", {
+                    success = true,
+                    count = imported
+                })
+                if config.DEBUG then
+                    print("[Jobs] Pulled " .. imported .. "x " .. itemName .. " from turtle slot " .. slot)
+                end
+            else
+                network.send(sender, "PULL_RESPONSE", {
+                    success = false,
+                    error = err or "Failed to pull item"
+                })
+            end
+        else
+            network.send(sender, "PULL_RESPONSE", {
+                success = false,
+                error = "ME Bridge not connected"
+            })
+        end
+        
     elseif message.type == "CRAFT_REQUEST" then
         -- Main Computer requesting a craft
         local recipeName = message.data.recipe

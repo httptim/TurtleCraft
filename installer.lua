@@ -16,6 +16,7 @@ local FILES = {
     {url = "lib/network.lua", path = "lib/network.lua"},
     {url = "lib/me_bridge.lua", path = "lib/me_bridge.lua"},
     {url = "lib/crafting.lua", path = "lib/crafting.lua"},
+    {url = "lib/crafting_v2.lua", path = "lib/crafting_v2.lua"},
     
     -- Data files
     {url = "recipes.lua", path = "recipes.lua"},
