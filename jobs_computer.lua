@@ -89,22 +89,25 @@ local function handleMessage(sender, message)
         
         -- Add turtle to list
         local found = false
+        local turtleRecord = nil
         for i, turtle in ipairs(turtles) do
             if turtle.id == sender then
                 turtle.lastSeen = os.clock()
                 turtle.status = "online"
                 found = true
+                turtleRecord = turtle
                 break
             end
         end
         
         if not found then
-            table.insert(turtles, {
+            turtleRecord = {
                 id = sender,
                 status = "online",
                 lastSeen = os.clock(),
                 peripheralName = nil  -- Will be set during discovery
-            })
+            }
+            table.insert(turtles, turtleRecord)
         end
         
         -- Send acknowledgment
@@ -112,6 +115,23 @@ local function handleMessage(sender, message)
             success = true,
             jobsComputerID = os.getComputerID()
         })
+        
+        -- Auto-discover if we have unidentified wired turtles
+        if not turtleRecord.peripheralName then
+            -- Check for unmapped turtle peripherals
+            local unmappedPeripherals = {}
+            for _, name in ipairs(peripheral.getNames()) do
+                if peripheral.getType(name) == "turtle" and not wiredTurtles[name] then
+                    table.insert(unmappedPeripherals, name)
+                end
+            end
+            
+            if #unmappedPeripherals > 0 then
+                print("[Jobs] Auto-discovering wired turtle...")
+                -- Try to discover this specific turtle
+                os.queueEvent("start_discovery")
+            end
+        end
         
     elseif message.type == "HEARTBEAT" then
         -- Update turtle last seen time
@@ -465,7 +485,8 @@ local function discoverWiredTurtles()
             local hasSpace = false
             local emptySlot = nil
             for slot = 1, 16 do
-                if turtle.getItemCount(slot) == 0 then
+                local item = turtle.getItemDetail(slot)
+                if not item then
                     hasSpace = true
                     emptySlot = slot
                     break
@@ -509,8 +530,8 @@ local function discoverWiredTurtles()
                         if exported and exported > 0 then
                             -- Check if this turtle got the item
                             sleep(0.5)
-                            local newCount = turtle.getItemCount(emptySlot)
-                            if newCount > 0 then
+                            local newItem = turtle.getItemDetail(emptySlot)
+                            if newItem then
                                 print("  Sent discovery item (" .. testItem .. ") to " .. peripheralName)
                                 success = true
                                 
@@ -670,6 +691,10 @@ local function main()
             end
         elseif event == "timer" and p1 == timer then
             -- Timer expired, continue loop
+        elseif event == "start_discovery" then
+            os.cancelTimer(timer)
+            -- Run discovery in background
+            discoverWiredTurtles()
         else
             os.cancelTimer(timer)
         end
