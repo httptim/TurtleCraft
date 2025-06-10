@@ -98,6 +98,8 @@ local function initialize()
         print("Loaded existing configuration.")
     end
     
+    print("\nInitializing system components...")
+    
     -- Update global CONFIG
     CONFIG.COMPUTER_TYPE = config.computer_type or CONFIG.COMPUTER_TYPE
     CONFIG.PERIPHERALS.MONITOR = config.monitor or CONFIG.PERIPHERALS.MONITOR
@@ -106,10 +108,12 @@ local function initialize()
     CONFIG.PERIPHERALS.ME_BRIDGE = config.me_bridge or CONFIG.PERIPHERALS.ME_BRIDGE
     
     -- Initialize logger
+    print("  * Initializing logger...")
     logger.init(CONFIG)
     logger.info("Jobs Computer starting up", "JOBS")
     
     -- Initialize network
+    print("  * Initializing network...")
     if not network.init(CONFIG) then
         logger.error("Failed to initialize network", "JOBS")
         return false
@@ -117,6 +121,7 @@ local function initialize()
     
     -- Initialize ME Bridge
     if CONFIG.PERIPHERALS.ME_BRIDGE then
+        print("  * Connecting to ME Bridge...")
         state.meBridge = peripheral.wrap(CONFIG.PERIPHERALS.ME_BRIDGE)
         if state.meBridge then
             logger.info("ME Bridge connected: " .. CONFIG.PERIPHERALS.ME_BRIDGE, "JOBS")
@@ -125,6 +130,8 @@ local function initialize()
             return false
         end
     end
+    
+    print("  * System ready!")
     
     return true
 end
@@ -351,7 +358,6 @@ local function main()
     setupMessageHandlers()
     
     print("\nStarting Jobs Computer...")
-    sleep(1)
     
     -- Create data directories
     utils.ensureDirectory("data")

@@ -13,6 +13,15 @@ This is a ComputerCraft: Tweaked project using Lua 5.2 (with select Lua 5.3 feat
 - This ensures consistency in API usage across the entire project
 - The docs file contains comprehensive API documentation and critical compatibility notes
 
+### Character Encoding
+- **CC:Tweaked only supports ASCII characters** - no Unicode or extended characters
+- Use ASCII alternatives:
+  - Checkmarks: Use `[OK]` instead of `✓` or `√`
+  - X marks: Use `[X]` instead of `✗` or `✖`
+  - Bullets: Use `*` or `-` instead of `•` or `·`
+  - Box drawing: Use `+`, `-`, `|` instead of `╔═╗║╚╝`
+  - Arrows: Use `->`, `<-`, `=>` instead of `→`, `←`, `⇒`
+
 ### Lua Version Compatibility
 - CC:Tweaked uses **Lua 5.2 with select Lua 5.3 features**
 - Available Lua 5.3 features: UTF-8 basics, integer division (//), bitwise operators (&, |, ~, <<, >>)

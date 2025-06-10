@@ -5,6 +5,7 @@ local network = {}
 
 -- Dependencies
 local logger = dofile("lib/logger.lua")
+local utils = dofile("lib/utils.lua")
 
 -- Network state
 local state = {
@@ -254,18 +255,50 @@ function network.findComputers(computerType, timeout)
     timeout = timeout or 2
     local found = {}
     
-    -- Look up via rednet
-    local computers = rednet.lookup(state.protocol)
-    
-    if type(computers) == "table" then
-        for _, id in ipairs(computers) do
-            if computerType == nil or string.match(rednet.lookup(state.protocol, id), "^" .. computerType) then
-                table.insert(found, id)
+    -- If looking for a specific type, use the hostname pattern
+    if computerType then
+        -- Look for computers with hostname starting with computerType
+        local hostname = computerType .. "_"
+        local computers = rednet.lookup(state.protocol, hostname)
+        
+        -- rednet.lookup with hostname returns nil or the computer ID(s)
+        if computers then
+            if type(computers) == "table" then
+                for _, id in ipairs(computers) do
+                    table.insert(found, id)
+                end
+            elseif type(computers) == "number" then
+                table.insert(found, computers)
             end
         end
-    elseif type(computers) == "number" then
-        if computerType == nil or string.match(rednet.lookup(state.protocol, computers), "^" .. computerType) then
-            table.insert(found, computers)
+        
+        -- Also check for exact computer type match (without ID suffix)
+        local exactMatch = rednet.lookup(state.protocol, computerType)
+        if exactMatch then
+            if type(exactMatch) == "table" then
+                for _, id in ipairs(exactMatch) do
+                    if not utils.tableContains(found, id) then
+                        table.insert(found, id)
+                    end
+                end
+            elseif type(exactMatch) == "number" then
+                if not utils.tableContains(found, exactMatch) then
+                    table.insert(found, exactMatch)
+                end
+            end
+        end
+    else
+        -- Look up all computers on protocol
+        local computers = rednet.lookup(state.protocol)
+        
+        if computers then
+            if type(computers) == "table" then
+                for _, id in ipairs(computers) do
+                    table.insert(found, id)
+                end
+            elseif type(computers) == "number" then
+                table.insert(found, computers)
+            end
         end
     end
     

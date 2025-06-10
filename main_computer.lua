@@ -92,20 +92,26 @@ local function initialize()
         print("Loaded existing configuration.")
     end
     
+    print("\nInitializing system components...")
+    
     -- Update global CONFIG
     CONFIG.COMPUTER_TYPE = config.computer_type or CONFIG.COMPUTER_TYPE
     CONFIG.PERIPHERALS.MONITOR = config.monitor or CONFIG.PERIPHERALS.MONITOR
     CONFIG.PERIPHERALS.WIRELESS_MODEM = config.wireless_modem or CONFIG.PERIPHERALS.WIRELESS_MODEM
     
     -- Initialize logger
+    print("  * Initializing logger...")
     logger.init(CONFIG)
     logger.info("Main Computer starting up", "MAIN")
     
     -- Initialize network
+    print("  * Initializing network...")
     if not network.init(CONFIG) then
         logger.error("Failed to initialize network", "MAIN")
         return false
     end
+    
+    print("  * System ready!")
     
     return true
 end
@@ -266,7 +272,6 @@ local function main()
     setupMessageHandlers()
     
     print("\nStarting Main Computer...")
-    sleep(1)
     
     -- Connect to Jobs Computer
     if not connectToJobsComputer() then

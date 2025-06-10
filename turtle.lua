@@ -125,6 +125,8 @@ local function initialize()
         state.turtleID = config.turtle_id or config.TURTLE_ID
     end
     
+    print("\nInitializing system components...")
+    
     -- Update global CONFIG
     CONFIG.COMPUTER_TYPE = config.computer_type or CONFIG.COMPUTER_TYPE
     CONFIG.PERIPHERALS.WIRELESS_MODEM = config.wireless_modem or CONFIG.PERIPHERALS.WIRELESS_MODEM
@@ -132,14 +134,18 @@ local function initialize()
     CONFIG.TURTLE_ID = state.turtleID
     
     -- Initialize logger
+    print("  * Initializing logger...")
     logger.init(CONFIG)
     logger.info("Turtle #" .. state.turtleID .. " starting up", "TURTLE")
     
     -- Initialize network
+    print("  * Initializing network...")
     if not network.init(CONFIG) then
         logger.error("Failed to initialize network", "TURTLE")
         return false
     end
+    
+    print("  * System ready!")
     
     return true
 end
@@ -345,7 +351,6 @@ local function main()
     setupMessageHandlers()
     
     print("\nStarting Turtle #" .. state.turtleID .. "...")
-    sleep(1)
     
     -- Check fuel
     if turtle.getFuelLevel() < 100 then
