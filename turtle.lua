@@ -1,413 +1,227 @@
--- turtle.lua
--- Turtle client for CC:Tweaked Distributed Crafting System
--- Handles crafting execution and communication with Jobs Computer
+-- Turtle Client for TurtleCraft
+-- Crafting turtle that connects to the Jobs Computer
 
--- Load libraries
-local utils = dofile("lib/utils.lua")
-local logger = dofile("lib/logger.lua")
+local config = dofile("config.lua")
 local network = dofile("lib/network.lua")
 
--- Load configuration template
-dofile("config_template.lua")
+-- State
+local running = true
+local jobsComputerID = nil
+local registered = false
 
--- Global state
-local state = {
-    running = true,
-    registered = false,
-    jobsComputerID = nil,
-    currentJob = nil,
-    status = TURTLE_STATUS.STARTING,
-    turtleID = nil,
-    heartbeatInterval = 30,
-    updateInterval = 5
-}
-
--- Check if turtle has crafting capability
-local function checkCraftingCapability()
-    -- Check if turtle.craft exists (Crafty Turtle)
-    if not turtle.craft then
-        return false, "Not a crafty turtle"
-    end
-    
-    -- Test crafting capability
-    local success = pcall(turtle.craft, 0)
-    return true, "Crafting capability confirmed"
+-- Clear screen helper
+local function clear()
+    term.clear()
+    term.setCursorPos(1, 1)
 end
 
--- Detect and configure peripherals
-local function detectAndConfigure()
-    -- Auto-detect peripherals
-    local detected = utils.detectPeripherals()
-    
-    -- Get computer type
-    local computerType, subtype = utils.detectComputerType()
-    
-    -- Display detection results
-    utils.displayPeripheralDetection(detected, computerType)
-    
-    -- Check crafting capability
-    local canCraft, craftMessage = checkCraftingCapability()
-    if not canCraft then
-        term.setCursorPos(3, 10)
-        term.setTextColor(colors.red)
-        print("ERROR: " .. craftMessage)
-        print("This program requires a Crafty Turtle!")
-        term.setTextColor(colors.white)
-        return nil
-    end
-    
-    -- Check for required peripherals
-    local hasWireless = #detected.modems.wireless > 0
-    local hasWired = #detected.modems.wired > 0
-    
-    if not hasWireless or not hasWired then
-        term.setCursorPos(3, 18)
-        term.setTextColor(colors.red)
-        print("ERROR: Missing required peripherals!")
-        if not hasWireless then print("  - No wireless modem detected") end
-        if not hasWired then print("  - No wired modem detected") end
-        term.setTextColor(colors.white)
-        return nil
-    end
-    
-    -- Build configuration
-    local config = {
-        computer_type = "turtle",
-        wireless_modem = detected.modems.wireless[1] or nil,
-        wired_modem = detected.modems.wired[1] or nil
-    }
-    
-    -- Display configuration
-    local y = utils.displayConfiguration(config, "turtle")
-    
-    -- Confirm configuration
-    if not utils.promptYesNo("Is this configuration correct?", 3, y + 1) then
-        return nil
-    end
-    
-    -- Get turtle ID
-    y = y + 2
-    state.turtleID = utils.promptNumber("Set turtle ID (1-10): ", 3, y, 1, CONFIG.MAX_TURTLES or 10)
-    config.turtle_id = state.turtleID
-    
-    -- Save configuration
-    y = y + 1
-    term.setCursorPos(3, y)
-    if utils.promptYesNo("Save configuration?", 3, y) then
-        utils.saveConfig(config)
-        sleep(0.5)
-    end
-    
-    return config
+-- Check if this is a crafty turtle
+local function isCraftyTurtle()
+    return turtle ~= nil and turtle.craft ~= nil
 end
 
--- Initialize system
-local function initialize()
-    utils.clearScreen()
-    print("CC:Tweaked Distributed Crafting System - Turtle")
-    print("===============================================")
+-- Display status
+local function displayStatus()
+    clear()
+    print("TurtleCraft - Turtle Client")
+    print("===========================")
+    print()
+    print("Turtle ID: " .. os.getComputerID())
+    print("Type: " .. (isCraftyTurtle() and "Crafty Turtle" or "Not a crafty turtle!"))
+    print("Jobs Computer: " .. (registered and "REGISTERED (ID: " .. jobsComputerID .. ")" or "NOT REGISTERED"))
     print()
     
-    -- Check for existing config
-    local config = utils.loadConfig()
-    
-    if not config then
-        print("No configuration found. Starting auto-detection...")
-        sleep(1)
-        
-        config = detectAndConfigure()
-        if not config then
-            print("\nConfiguration cancelled. Exiting...")
-            return false
-        end
-    else
-        print("Loaded existing configuration.")
-        state.turtleID = config.turtle_id or config.TURTLE_ID
+    if turtle then
+        print("Fuel Level: " .. turtle.getFuelLevel())
     end
     
-    print("\nInitializing system components...")
-    
-    -- Update global CONFIG
-    CONFIG.COMPUTER_TYPE = config.computer_type or CONFIG.COMPUTER_TYPE
-    CONFIG.PERIPHERALS.WIRELESS_MODEM = config.wireless_modem or CONFIG.PERIPHERALS.WIRELESS_MODEM
-    CONFIG.PERIPHERALS.WIRED_MODEM = config.wired_modem or CONFIG.PERIPHERALS.WIRED_MODEM
-    CONFIG.TURTLE_ID = state.turtleID
-    
-    -- Initialize logger
-    print("  * Initializing logger...")
-    logger.init(CONFIG)
-    logger.info("Turtle #" .. state.turtleID .. " starting up", "TURTLE")
-    
-    -- Initialize network
-    print("  * Initializing network...")
-    if not network.init(CONFIG) then
-        logger.error("Failed to initialize network", "TURTLE")
-        return false
-    end
-    
-    print("  * System ready!")
-    
-    return true
+    print()
+    print("Commands:")
+    print("  R - Re-register with Jobs Computer")
+    print("  F - Refuel from slot 16")
+    print("  Q - Quit")
 end
 
 -- Register with Jobs Computer
 local function registerWithJobsComputer()
-    logger.info("Searching for Jobs Computer...", "TURTLE")
+    print("\n[Turtle] Searching for Jobs Computer...")
     
-    local maxAttempts = 10
-    local attempt = 0
-    
-    while attempt < maxAttempts and not state.registered do
-        attempt = attempt + 1
+    -- First try the configured ID
+    if config.JOBS_COMPUTER_ID then
+        print("[Turtle] Trying configured ID: " .. config.JOBS_COMPUTER_ID)
         
-        -- Find jobs computers
-        local jobsComputers = network.findComputers("jobs")
+        network.send(config.JOBS_COMPUTER_ID, "REGISTER", {
+            turtleType = "crafty",
+            fuelLevel = turtle and turtle.getFuelLevel() or 0
+        })
         
-        if #jobsComputers > 0 then
-            state.jobsComputerID = jobsComputers[1]
-            logger.info("Found Jobs Computer with ID: " .. state.jobsComputerID, "TURTLE")
-            
-            -- Send registration request
-            local success, response = network.send(
-                state.jobsComputerID, 
-                MESSAGE_TYPES.REGISTER, 
-                {
-                    turtleID = state.turtleID,
-                    type = "crafty",
-                    capabilities = {
-                        crafting = true,
-                        wired = CONFIG.PERIPHERALS.WIRED_MODEM ~= nil
-                    }
-                },
-                true  -- wait for response
-            )
-            
-            if success and response and response.data.success then
-                state.registered = true
-                state.status = TURTLE_STATUS.IDLE
-                
-                -- Update intervals from config
-                if response.data.config then
-                    state.heartbeatInterval = response.data.config.heartbeatInterval or state.heartbeatInterval
-                    state.updateInterval = response.data.config.updateInterval or state.updateInterval
+        -- Wait for response
+        local startTime = os.clock()
+        while os.clock() - startTime < 3 do
+            local sender, message = network.receive(0.1)
+            if sender == config.JOBS_COMPUTER_ID and message and message.type == "REGISTER_ACK" then
+                if message.data.success then
+                    jobsComputerID = config.JOBS_COMPUTER_ID
+                    registered = true
+                    print("[Turtle] Successfully registered!")
+                    return true
                 end
-                
-                logger.info("Successfully registered with Jobs Computer", "TURTLE")
-                return true
-            else
-                logger.warn("Registration failed, attempt " .. attempt, "TURTLE")
             end
-        else
-            logger.debug("No Jobs Computer found, attempt " .. attempt .. "/" .. maxAttempts, "TURTLE")
         end
-        
-        sleep(2)
     end
     
-    logger.error("Failed to register with Jobs Computer", "TURTLE")
+    -- Try to find by hostname
+    print("[Turtle] Searching by hostname...")
+    local computers = network.findComputers("jobs")
+    
+    for _, id in ipairs(computers) do
+        print("[Turtle] Trying Jobs Computer ID " .. id .. "...")
+        
+        network.send(id, "REGISTER", {
+            turtleType = "crafty",
+            fuelLevel = turtle and turtle.getFuelLevel() or 0
+        })
+        
+        -- Wait for response
+        local startTime = os.clock()
+        while os.clock() - startTime < 3 do
+            local sender, message = network.receive(0.1)
+            if sender == id and message and message.type == "REGISTER_ACK" then
+                if message.data.success then
+                    jobsComputerID = id
+                    registered = true
+                    print("[Turtle] Successfully registered with Jobs Computer ID " .. id .. "!")
+                    return true
+                end
+            end
+        end
+    end
+    
+    print("[Turtle] Could not register with Jobs Computer!")
+    print("[Turtle] Make sure Jobs Computer is running first")
     return false
 end
 
 -- Send heartbeat
 local function sendHeartbeat()
-    if not state.registered or not state.jobsComputerID then
-        return
-    end
-    
-    network.send(state.jobsComputerID, MESSAGE_TYPES.HEARTBEAT, {
-        turtleID = state.turtleID,
-        status = state.status,
-        fuel = turtle.getFuelLevel(),
-        currentJob = state.currentJob
-    })
-end
-
--- Message handlers
-local function setupMessageHandlers()
-    -- Job assignment
-    network.on(MESSAGE_TYPES.JOB_ASSIGN, function(sender, message)
-        if sender == state.jobsComputerID then
-            logger.info("Received job assignment: " .. (message.data.item or "unknown"), "TURTLE")
-            
-            -- Accept the job
-            state.currentJob = message.data
-            state.status = TURTLE_STATUS.BUSY
-            
-            network.respond(message, MESSAGE_TYPES.JOB_ACCEPT, {
-                turtleID = state.turtleID,
-                jobId = message.data.jobId
-            })
-            
-            -- Job execution will be implemented in later phases
-        end
-    end)
-    
-    -- Shutdown command
-    network.on(MESSAGE_TYPES.SHUTDOWN, function(sender, message)
-        if sender == state.jobsComputerID then
-            logger.info("Shutdown command received", "TURTLE")
-            state.running = false
-        end
-    end)
-end
-
--- Display status
-local function displayStatus()
-    utils.clearScreen()
-    print("CC:Tweaked Distributed Crafting System - Turtle #" .. state.turtleID)
-    print("====================================================")
-    print()
-    print("Status: " .. state.status)
-    print("Jobs Computer: " .. (state.registered and "CONNECTED" or "NOT CONNECTED"))
-    print("Jobs Computer ID: " .. (state.jobsComputerID or "None"))
-    print()
-    print("Fuel Level: " .. turtle.getFuelLevel())
-    print()
-    
-    if state.currentJob then
-        print("Current Job:")
-        print("  Item: " .. (state.currentJob.item or "None"))
-        print("  Quantity: " .. (state.currentJob.quantity or 0))
-    else
-        print("Current Job: None")
-    end
-    
-    print()
-    print("Press Q to quit")
-end
-
--- Heartbeat loop
-local function heartbeatLoop()
-    while state.running do
-        if state.registered then
-            sendHeartbeat()
-            sleep(state.heartbeatInterval)
-        else
-            -- Try to re-register
-            registerWithJobsComputer()
-            sleep(10)
-        end
-    end
-end
-
--- Status update loop
-local function statusUpdateLoop()
-    while state.running do
-        if state.registered and state.jobsComputerID then
-            -- Send status update
-            network.send(state.jobsComputerID, MESSAGE_TYPES.TURTLE_STATUS, {
-                turtleID = state.turtleID,
-                status = state.status,
-                fuel = turtle.getFuelLevel(),
-                inventory = {
-                    -- Will implement inventory checking in later phases
-                }
-            })
-        end
-        
-        sleep(state.updateInterval)
-    end
-end
-
--- User input loop
-local function inputLoop()
-    while state.running do
-        local event, key = os.pullEvent("key")
-        
-        if key == keys.q then
-            state.running = false
-            logger.info("Shutdown requested by user", "TURTLE")
-        elseif key == keys.f then
-            -- Refuel from slot 16
-            turtle.select(16)
-            local refueled = turtle.refuel()
-            if refueled then
-                logger.info("Refueled. New level: " .. turtle.getFuelLevel(), "TURTLE")
-            else
-                logger.warn("No fuel in slot 16", "TURTLE")
-            end
-        end
-    end
-end
-
--- Display loop
-local function displayLoop()
-    while state.running do
-        displayStatus()
-        sleep(1)
-    end
-end
-
--- Main program
-local function main()
-    -- Initialize system
-    if not initialize() then
-        print("\nInitialization failed. Press any key to exit...")
-        os.pullEvent("key")
-        return
-    end
-    
-    -- Setup message handlers
-    setupMessageHandlers()
-    
-    print("\nStarting Turtle #" .. state.turtleID .. "...")
-    
-    -- Check fuel
-    if turtle.getFuelLevel() < 100 then
-        print("\nWARNING: Low fuel level!")
-        print("Place fuel in slot 16 and press F to refuel")
-        print()
-    end
-    
-    -- Register with Jobs Computer
-    if not registerWithJobsComputer() then
-        print("\nWARNING: Could not register with Jobs Computer")
-        print("The turtle will keep trying to connect...")
-        print("Make sure the Jobs Computer is running!")
-        print()
-        print("Press any key to continue...")
-        os.pullEvent("key")
-    end
-    
-    logger.info("Turtle #" .. state.turtleID .. " ready for jobs", "TURTLE")
-    
-    -- Start parallel tasks
-    parallel.waitForAny(
-        network.startListening(),
-        heartbeatLoop,
-        statusUpdateLoop,
-        displayLoop,
-        inputLoop
-    )
-    
-    -- Shutdown
-    logger.info("Turtle #" .. state.turtleID .. " shutting down", "TURTLE")
-    
-    -- Notify Jobs Computer if connected
-    if state.registered and state.jobsComputerID then
-        network.send(state.jobsComputerID, MESSAGE_TYPES.SHUTDOWN, {
-            turtleID = state.turtleID,
-            reason = "Turtle shutting down"
+    if registered and jobsComputerID then
+        network.send(jobsComputerID, "HEARTBEAT", {
+            fuelLevel = turtle and turtle.getFuelLevel() or 0,
+            status = "idle"
         })
     end
-    
-    network.shutdown()
-    
-    utils.clearScreen()
-    print("Turtle #" .. state.turtleID .. " shutdown complete.")
 end
 
--- Error handling wrapper
-local function safeMain()
-    local success, error = pcall(main)
+-- Handle incoming messages
+local function handleMessage(sender, message)
+    if not message or not message.type then return end
     
-    if not success then
-        logger.error("Fatal error: " .. tostring(error), "TURTLE")
-        print("\nFATAL ERROR: " .. tostring(error))
-        print("\nPress any key to exit...")
-        os.pullEvent("key")
+    if message.type == "PONG" then
+        -- Handled by ping function
+        
+    elseif message.type == "HEARTBEAT_ACK" and sender == jobsComputerID then
+        -- Heartbeat acknowledged
+        
+    elseif message.type == "JOB_ASSIGN" and sender == jobsComputerID then
+        print("\n[Turtle] Received job assignment!")
+        -- Job handling will be implemented in later phases
+        network.send(jobsComputerID, "JOB_ACK", {
+            accepted = false,
+            reason = "Not implemented yet"
+        })
     end
 end
 
--- Run the program
-safeMain()
+-- Main function
+local function main()
+    clear()
+    
+    -- Check if this is a crafty turtle
+    if not isCraftyTurtle() then
+        print("ERROR: This program requires a Crafty Turtle!")
+        print("\nPress any key to exit...")
+        os.pullEvent("key")
+        return
+    end
+    
+    print("Starting Turtle Client...")
+    
+    -- Initialize network
+    if not network.init() then
+        print("Failed to initialize network!")
+        return
+    end
+    
+    -- Host ourselves (optional)
+    network.host("turtle_" .. os.getComputerID())
+    
+    print("Turtle ready!")
+    sleep(1)
+    
+    -- Try to register
+    registerWithJobsComputer()
+    
+    -- Main loop
+    local lastDisplay = os.clock()
+    local lastHeartbeat = os.clock()
+    
+    while running do
+        -- Check for messages
+        local sender, message = network.receive(0.1)
+        if sender then
+            handleMessage(sender, message)
+        end
+        
+        -- Send heartbeat
+        if registered and os.clock() - lastHeartbeat > config.HEARTBEAT_INTERVAL then
+            sendHeartbeat()
+            lastHeartbeat = os.clock()
+        end
+        
+        -- Update display
+        if os.clock() - lastDisplay > 1 then
+            displayStatus()
+            lastDisplay = os.clock()
+        end
+        
+        -- Check for user input (non-blocking)
+        local timer = os.startTimer(0.1)
+        local event, p1, p2 = os.pullEvent()
+        if event == "key" then
+            os.cancelTimer(timer)
+            if p1 == keys.q then
+                running = false
+            elseif p1 == keys.r then
+                print("\n[Turtle] Re-registering...")
+                registered = false
+                registerWithJobsComputer()
+                sleep(1)
+            elseif p1 == keys.f and turtle then
+                turtle.select(16)
+                if turtle.refuel() then
+                    print("\n[Turtle] Refueled! New level: " .. turtle.getFuelLevel())
+                else
+                    print("\n[Turtle] No fuel in slot 16!")
+                end
+                sleep(1)
+            end
+        elseif event == "timer" and p1 == timer then
+            -- Timer expired, continue loop
+        else
+            os.cancelTimer(timer)
+        end
+    end
+    
+    -- Cleanup
+    network.close()
+    clear()
+    print("Turtle stopped.")
+end
+
+-- Run with error handling
+local ok, err = pcall(main)
+if not ok then
+    print("ERROR: " .. tostring(err))
+    print("\nPress any key to exit...")
+    os.pullEvent("key")
+end

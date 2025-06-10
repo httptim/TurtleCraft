@@ -9,27 +9,25 @@ local INSTALL_DIR = ""  -- Install in root directory
 
 -- File manifest for CC:Tweaked Distributed Crafting System
 local FILES = {
-    -- Config files
-    {url = "config_template.lua", path = "config_template.lua"},
-    {url = "recipes.lua", path = "recipes.lua"},
-    {url = "priorities.lua", path = "priorities.lua"},
+    -- Config file
+    {url = "config.lua", path = "config.lua"},
     
     -- Library files
-    {url = "lib/utils.lua", path = "lib/utils.lua"},
-    {url = "lib/logger.lua", path = "lib/logger.lua"},
     {url = "lib/network.lua", path = "lib/network.lua"},
     
     -- Main programs
     {url = "main_computer.lua", path = "main_computer.lua"},
     {url = "jobs_computer.lua", path = "jobs_computer.lua"},
     {url = "turtle.lua", path = "turtle.lua"},
+    
+    -- Optional utilities
+    {url = "startup.lua", path = "startup.lua"},
+    {url = "test_network.lua", path = "test_network.lua"},
 }
 
 -- Directories to create  
 local DIRECTORIES = {
-    "lib",
-    "logs",
-    "data"
+    "lib"
 }
 
 -- Launcher scripts
@@ -238,8 +236,8 @@ local function drawTitle()
     centerText(9, "              |_|                      ", colors.cyan)
     
     centerText(11, "GitHub Installer", colors.lightBlue)
-    centerText(12, "CC:Tweaked Distributed Crafting System", colors.white)
-    centerText(13, "Phase 1: Core Infrastructure", colors.yellow)
+    centerText(12, "TurtleCraft - Distributed Crafting System", colors.white)
+    centerText(13, "Simple Network Implementation", colors.yellow)
 end
 
 -- Create progress bar string
@@ -416,9 +414,12 @@ local function install()
     addScrollLine("+ Installation complete!", colors.lime)
     addScrollLine("", colors.white)
     addScrollLine("To start the system:", colors.yellow)
-    addScrollLine("  Jobs Computer: Run 'start-jobs'", colors.white)
-    addScrollLine("  Main Computer: Run 'start-main'", colors.white)
-    addScrollLine("  Turtles: Run 'start-turtle'", colors.white)
+    addScrollLine("  1. Jobs Computer: Run 'start-jobs' (START FIRST!)", colors.white)
+    addScrollLine("  2. Main Computer: Run 'start-main'", colors.white)
+    addScrollLine("  3. Turtles: Run 'start-turtle'", colors.white)
+    addScrollLine("", colors.white)
+    addScrollLine("Or run 'startup' for a menu", colors.cyan)
+    addScrollLine("Run 'test_network' to test connectivity", colors.cyan)
     
     sleep(2)
     
