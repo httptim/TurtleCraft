@@ -135,6 +135,52 @@ function me_bridge.exportItem(itemName, count, direction)
     return result
 end
 
+-- Export items to a specific peripheral (like a turtle)
+function me_bridge.exportItemToPeripheral(itemName, count, peripheralName)
+    if not connected then
+        return nil, "Not connected to ME Bridge"
+    end
+    
+    if not bridge.exportItemToPeripheral then
+        return nil, "ME Bridge doesn't support exportItemToPeripheral"
+    end
+    
+    local item = {name = itemName, count = count}
+    local ok, result = pcall(bridge.exportItemToPeripheral, bridge, item, peripheralName)
+    if not ok then
+        return nil, tostring(result)
+    end
+    
+    if config.DEBUG then
+        print("[ME Bridge] Exported " .. tostring(result) .. "x " .. itemName .. " to " .. peripheralName)
+    end
+    
+    return result
+end
+
+-- Import items from a specific peripheral (like a turtle)
+function me_bridge.importItemFromPeripheral(itemName, count, peripheralName)
+    if not connected then
+        return nil, "Not connected to ME Bridge"
+    end
+    
+    if not bridge.importItemFromPeripheral then
+        return nil, "ME Bridge doesn't support importItemFromPeripheral"
+    end
+    
+    local item = {name = itemName, count = count}
+    local ok, result = pcall(bridge.importItemFromPeripheral, bridge, item, peripheralName)
+    if not ok then
+        return nil, tostring(result)
+    end
+    
+    if config.DEBUG then
+        print("[ME Bridge] Imported " .. tostring(result) .. "x " .. itemName .. " from " .. peripheralName)
+    end
+    
+    return result
+end
+
 -- Import items from a direction into ME
 function me_bridge.importItem(itemName, count, direction)
     if not connected then

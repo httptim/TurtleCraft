@@ -178,15 +178,44 @@ local function handleMessage(sender, message)
         
         print("\n[Jobs] Turtle #" .. sender .. " requesting " .. count .. "x " .. itemName)
         
-        -- Export items from ME to turtle (assuming turtle is adjacent)
-        local exported, err = me_bridge.exportItem(itemName, count, "up")
-        if exported then
+        -- Find the turtle's peripheral name
+        local turtlePeripheral = nil
+        for _, turtle in ipairs(turtles) do
+            if turtle.id == sender and turtle.peripheralName then
+                turtlePeripheral = turtle.peripheralName
+                break
+            end
+        end
+        
+        if not turtlePeripheral then
+            -- Try to find in wiredTurtles mapping
+            for peripheral, id in pairs(wiredTurtles) do
+                if id == sender then
+                    turtlePeripheral = peripheral
+                    break
+                end
+            end
+        end
+        
+        if not turtlePeripheral then
+            network.send(sender, "ITEMS_RESPONSE", {
+                success = false,
+                error = "Turtle peripheral not found - run discovery (D)"
+            })
+            print("[Jobs] Error: Turtle peripheral name not found")
+            return
+        end
+        
+        -- Export items from ME to turtle using peripheral name
+        local exported, err = me_bridge.exportItemToPeripheral(itemName, count, turtlePeripheral)
+        
+        if exported > 0 then
             network.send(sender, "ITEMS_RESPONSE", {
                 success = true,
                 item = itemName,
                 count = exported
             })
-            print("[Jobs] Exported " .. exported .. "x " .. itemName .. " to turtle")
+            print("[Jobs] Exported " .. exported .. "x " .. itemName .. " to " .. turtlePeripheral)
         else
             network.send(sender, "ITEMS_RESPONSE", {
                 success = false,
@@ -215,8 +244,46 @@ local function handleMessage(sender, message)
             print("\n[Jobs] Turtle #" .. sender .. " depositing " .. count .. "x " .. itemName)
         end
         
-        -- Import items from turtle to ME (assuming turtle is adjacent)
-        local imported, err = me_bridge.importItem(itemName, count, "up")
+        -- Find the turtle's peripheral name
+        local turtlePeripheral = nil
+        for _, turtle in ipairs(turtles) do
+            if turtle.id == sender and turtle.peripheralName then
+                turtlePeripheral = turtle.peripheralName
+                break
+            end
+        end
+        
+        if not turtlePeripheral then
+            for peripheral, id in pairs(wiredTurtles) do
+                if id == sender then
+                    turtlePeripheral = peripheral
+                    break
+                end
+            end
+        end
+        
+        if not turtlePeripheral then
+            -- Fallback to direction-based import if no peripheral name
+            local imported, err = me_bridge.importItem(itemName, count, "up")
+            if imported then
+                network.send(sender, "DEPOSIT_RESPONSE", {
+                    success = true,
+                    item = itemName,
+                    count = imported
+                })
+                print("[Jobs] Imported " .. imported .. "x " .. itemName .. " from turtle (direction)")
+            else
+                network.send(sender, "DEPOSIT_RESPONSE", {
+                    success = false,
+                    error = err or "Failed to import items"
+                })
+                print("[Jobs] Failed to import: " .. tostring(err))
+            end
+            return
+        end
+        
+        -- Import items from turtle to ME using peripheral name
+        local imported, err = me_bridge.importItemFromPeripheral(itemName, count, turtlePeripheral)
         if imported then
             network.send(sender, "DEPOSIT_RESPONSE", {
                 success = true,

@@ -260,9 +260,25 @@ local function craftItems()
     local recipe = recipes.get(recipeName)
     
     print()
-    print("How many to craft? (Recipe makes " .. recipe.count .. " per batch)")
+    print("Recipe yields: " .. recipe.count .. " per craft")
+    print("How many " .. recipeName .. " do you want total?")
+    print("(Will craft in batches of " .. recipe.count .. ")")
     write("> ")
     local quantity = tonumber(read()) or recipe.count
+    
+    -- Calculate batches needed
+    local batchesNeeded = math.ceil(quantity / recipe.count)
+    local actualOutput = batchesNeeded * recipe.count
+    
+    if actualOutput > quantity then
+        print()
+        print("Note: Will craft " .. batchesNeeded .. " batch(es) = " .. actualOutput .. " items")
+        print("Continue? (Y/N)")
+        local confirm = read()
+        if string.upper(confirm) ~= "Y" then
+            return
+        end
+    end
     
     print("\n[Turtle] Requesting craft job...")
     
@@ -274,8 +290,13 @@ local function craftItems()
     )
     
     if success then
-        print("\n[Turtle] Successfully crafted " .. crafted .. " items!")
-        print("Deposited:")
+        print("\n[Turtle] Crafting complete!")
+        print("Requested: " .. quantity .. "x " .. recipeName)
+        print("Crafted: " .. crafted .. " items")
+        if crafted > quantity then
+            print("(Made extra due to batch size)")
+        end
+        print("\nDeposited to ME:")
         for item, count in pairs(deposited) do
             print("  " .. item .. " x" .. count)
         end

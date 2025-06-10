@@ -137,9 +137,17 @@ local function requestCrafting()
     if not recipes[choice] then return end
     
     local recipe = recipes[choice]
-    print("\nHow many to craft?")
+    print("\nRecipe yields: " .. recipe.count .. " per craft")
+    print("How many " .. recipe.name .. " do you want total?")
     write("> ")
     local quantity = tonumber(read()) or recipe.count
+    
+    -- Show what will actually be crafted
+    local batches = math.ceil(quantity / recipe.count)
+    local actualOutput = batches * recipe.count
+    if actualOutput > quantity then
+        print("\nNote: Will craft " .. batches .. " batch(es) = " .. actualOutput .. " items")
+    end
     
     -- For now, just send a test message
     print("\n[Main] Requesting craft of " .. quantity .. "x " .. recipe.name)

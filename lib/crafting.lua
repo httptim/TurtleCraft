@@ -159,30 +159,41 @@ function crafting.depositItems(turtle, network, jobsComputerID)
         turtle.select(slot)
         local item = turtle.getItemDetail()
         if item then
-            -- Drop the items
-            if turtle.dropDown(item.count) then
-                -- Notify Jobs Computer
-                network.send(jobsComputerID, "DEPOSIT_ITEMS", {
-                    item = item.name,
-                    count = item.count
-                })
-                
-                -- Track what we deposited
-                deposited[item.name] = (deposited[item.name] or 0) + item.count
-                
-                -- Wait for confirmation (optional)
-                local timeout = os.startTimer(2)
-                while true do
-                    local event, p1 = os.pullEvent()
-                    if event == "timer" and p1 == timeout then
-                        break
-                    elseif event == "rednet_message" then
-                        local sender, message = p1, p2
-                        if sender == jobsComputerID and message and message.type == "DEPOSIT_RESPONSE" then
-                            os.cancelTimer(timeout)
-                            break
+            -- Notify Jobs Computer to pull the items
+            network.send(jobsComputerID, "DEPOSIT_ITEMS", {
+                item = item.name,
+                count = item.count
+            })
+            
+            -- Wait for confirmation
+            local timeout = os.startTimer(5)
+            local success = false
+            while true do
+                local event, p1, p2 = os.pullEvent()
+                if event == "timer" and p1 == timeout then
+                    print("Timeout waiting for deposit confirmation")
+                    break
+                elseif event == "rednet_message" then
+                    local sender, message = p1, p2
+                    if sender == jobsComputerID and message and message.type == "DEPOSIT_RESPONSE" then
+                        os.cancelTimer(timeout)
+                        if message.data.success then
+                            deposited[item.name] = (deposited[item.name] or 0) + item.count
+                            success = true
+                        else
+                            print("Failed to deposit: " .. (message.data.error or "Unknown error"))
                         end
+                        break
                     end
+                end
+            end
+            
+            -- If deposit successful, the item should be gone from inventory
+            if success then
+                -- Check if item was actually removed
+                local remaining = turtle.getItemDetail()
+                if remaining and remaining.name == item.name then
+                    print("Warning: Item still in inventory after deposit")
                 end
             end
         end
