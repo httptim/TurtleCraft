@@ -194,6 +194,10 @@ function me_bridge.importItemFromPeripheral(itemName, count, peripheralName)
         return nil, tostring(result)
     end
     
+    if config.DEBUG then
+        print("[ME Bridge] Raw import result: " .. tostring(result) .. " (type: " .. type(result) .. ")")
+    end
+    
     -- Handle different return types from the ME Bridge
     if result == nil then
         -- Some versions might return nil on success, assume it worked

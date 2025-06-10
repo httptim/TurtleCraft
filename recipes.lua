@@ -44,9 +44,9 @@ recipes["minecraft:stick"] = {
     result = "minecraft:stick",
     count = 4,
     pattern = {
-        "   ",
         "A  ",
-        "A  "
+        "A  ",
+        "   "
     },
     ingredients = {
         A = "minecraft:oak_planks"

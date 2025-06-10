@@ -103,6 +103,12 @@ function crafting_v2.arrangeCraftingGrid(recipe)
     local recipes = dofile("recipes.lua")
     local slots = recipes.patternToSlots(recipe.pattern, recipe.ingredients)
     
+    print("Arranging items for recipe:")
+    print("Pattern slots needed:")
+    for slot, item in pairs(slots) do
+        print("  Slot " .. slot .. ": " .. item)
+    end
+    
     -- First, move everything to storage area (slots 12-16)
     for slot = 1, 11 do
         turtle.select(slot)
@@ -127,6 +133,7 @@ function crafting_v2.arrangeCraftingGrid(recipe)
                 -- Transfer one to the target slot
                 if turtle.transferTo(targetSlot, 1) then
                     placed = true
+                    print("Placed " .. itemName .. " in slot " .. targetSlot)
                     break
                 end
             end
@@ -134,6 +141,21 @@ function crafting_v2.arrangeCraftingGrid(recipe)
         
         if not placed then
             return false, "Could not place " .. itemName .. " in slot " .. targetSlot
+        end
+    end
+    
+    -- Show final grid state
+    print("Final crafting grid:")
+    for slot = 1, 11 do
+        if slot == 4 or slot == 8 then
+            -- Skip slots 4 and 8 (not part of crafting grid)
+        else
+            turtle.select(slot)
+            local count = turtle.getItemCount()
+            if count > 0 then
+                local item = turtle.getItemDetail()
+                print("  Slot " .. slot .. ": " .. (item and item.name or "unknown") .. " x" .. count)
+            end
         end
     end
     
@@ -156,10 +178,27 @@ function crafting_v2.craft(recipe, quantity)
         
         -- Select slot 1 and craft
         turtle.select(1)
+        print("Attempting to craft...")
         if turtle.craft() then
             crafted = crafted + recipe.count
             print("Batch " .. batch .. " complete (" .. recipe.count .. " items)")
+            
+            -- Show what's in inventory after crafting
+            print("After crafting:")
+            for slot = 1, 16 do
+                local item = turtle.getItemDetail(slot)
+                if item then
+                    print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
+                end
+            end
         else
+            print("Craft failed! Current inventory:")
+            for slot = 1, 16 do
+                local item = turtle.getItemDetail(slot)
+                if item then
+                    print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
+                end
+            end
             return crafted, "Crafting failed at batch " .. batch
         end
     end
@@ -243,7 +282,11 @@ function crafting_v2.performCraft(network, jobsComputerID, recipeName, quantity)
         return false, err
     end
     
+    -- Give a moment for items to settle
+    sleep(0.5)
+    
     -- Step 4: Return everything to ME
+    print("\nReturning all items to ME system...")
     local returned = crafting_v2.returnItems(network, jobsComputerID)
     
     print("\n=== Craft Job Complete ===")

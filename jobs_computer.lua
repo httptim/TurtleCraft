@@ -367,6 +367,9 @@ local function handleMessage(sender, message)
         local itemName = message.data.item
         local count = message.data.count
         
+        print("\n[Jobs] PULL_ITEM request from Turtle #" .. sender)
+        print("[Jobs] Item: " .. itemName .. " x" .. count .. " from slot " .. slot)
+        
         -- Find turtle's peripheral name
         local turtlePeripheral = nil
         for _, turtle in ipairs(turtles) do
@@ -386,6 +389,7 @@ local function handleMessage(sender, message)
         end
         
         if not turtlePeripheral then
+            print("[Jobs] Error: Turtle peripheral not found")
             network.send(sender, "PULL_RESPONSE", {
                 success = false,
                 error = "Turtle peripheral not found"
@@ -393,28 +397,32 @@ local function handleMessage(sender, message)
             return
         end
         
+        print("[Jobs] Using peripheral: " .. turtlePeripheral)
+        
         -- Pull the item from turtle to ME
         if me_bridge.isConnected() then
             local imported, err = me_bridge.importItemFromPeripheral(itemName, count, turtlePeripheral)
+            print("[Jobs] Import result: imported=" .. tostring(imported) .. ", err=" .. tostring(err))
+            
             if imported and imported > 0 then
                 network.send(sender, "PULL_RESPONSE", {
                     success = true,
                     count = imported
                 })
-                if config.DEBUG then
-                    print("[Jobs] Pulled " .. imported .. "x " .. itemName .. " from turtle slot " .. slot)
-                end
+                print("[Jobs] Successfully pulled " .. imported .. "x " .. itemName .. " from turtle")
             else
                 network.send(sender, "PULL_RESPONSE", {
                     success = false,
                     error = err or "Failed to pull item"
                 })
+                print("[Jobs] Failed to pull item: " .. tostring(err))
             end
         else
             network.send(sender, "PULL_RESPONSE", {
                 success = false,
                 error = "ME Bridge not connected"
             })
+            print("[Jobs] Error: ME Bridge not connected")
         end
         
     elseif message.type == "CRAFT_REQUEST" then
