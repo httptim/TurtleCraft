@@ -60,8 +60,8 @@ local function displayStatus()
     
     -- Show wired turtles awaiting discovery
     local wiredCount = 0
-    for _ in pairs(peripheral.getNames()) do
-        local pType = peripheral.getType(_)
+    for _, name in ipairs(peripheral.getNames()) do
+        local pType = peripheral.getType(name)
         if pType == "turtle" then
             wiredCount = wiredCount + 1
         end
