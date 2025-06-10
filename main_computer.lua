@@ -10,6 +10,7 @@ local jobsComputerID = nil
 local connected = false
 local systemStatus = {
     turtleCount = 0,
+    activeTurtleCount = 0,
     jobsRunning = false
 }
 
@@ -31,7 +32,11 @@ local function displayStatus()
     
     if connected then
         print("System Status:")
-        print("  Turtles: " .. systemStatus.turtleCount)
+        if systemStatus.activeTurtleCount < systemStatus.turtleCount then
+            print("  Turtles: " .. systemStatus.activeTurtleCount .. "/" .. systemStatus.turtleCount .. " active")
+        else
+            print("  Turtles: " .. systemStatus.turtleCount)
+        end
         print("  Jobs Running: " .. (systemStatus.jobsRunning and "Yes" or "No"))
     end
     
@@ -101,6 +106,7 @@ local function handleMessage(sender, message)
         
     elseif message.type == "STATUS_RESPONSE" and sender == jobsComputerID then
         systemStatus.turtleCount = message.data.turtleCount or 0
+        systemStatus.activeTurtleCount = message.data.activeTurtleCount or systemStatus.turtleCount
         systemStatus.jobsRunning = message.data.running or false
     end
 end

@@ -12,6 +12,8 @@ local config = {
     -- Timeouts
     NETWORK_TIMEOUT = 5,
     HEARTBEAT_INTERVAL = 30,
+    TURTLE_OFFLINE_TIMEOUT = 60,  -- Mark offline after 1 minute
+    TURTLE_REMOVE_TIMEOUT = 180,  -- Remove from list after 3 minutes
     
     -- Debug
     DEBUG = true,

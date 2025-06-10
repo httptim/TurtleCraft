@@ -25,8 +25,14 @@ local function displayStatus()
     print("Protocol: " .. config.PROTOCOL)
     print()
     print("Registered Turtles: " .. #turtles)
+    local now = os.clock()
     for i, turtle in ipairs(turtles) do
-        print("  - Turtle #" .. turtle.id .. " (" .. turtle.status .. ")")
+        local status = turtle.status
+        if turtle.status == "offline" then
+            local offlineTime = math.floor(now - turtle.lastSeen)
+            status = status .. " - " .. offlineTime .. "s ago"
+        end
+        print("  - Turtle #" .. turtle.id .. " (" .. status .. ")")
     end
     print()
     print("Press Q to quit")
@@ -80,21 +86,61 @@ local function handleMessage(sender, message)
         network.send(sender, "HEARTBEAT_ACK", {})
         
     elseif message.type == "STATUS_REQUEST" then
+        -- Count active turtles
+        local activeTurtles = 0
+        for _, turtle in ipairs(turtles) do
+            if turtle.status ~= "offline" then
+                activeTurtles = activeTurtles + 1
+            end
+        end
+        
         network.send(sender, "STATUS_RESPONSE", {
             turtleCount = #turtles,
+            activeTurtleCount = activeTurtles,
             running = true
         })
+        
+    elseif message.type == "UNREGISTER" then
+        -- Turtle is shutting down gracefully
+        for i = #turtles, 1, -1 do
+            if turtles[i].id == sender then
+                print("\n[Jobs] Turtle #" .. sender .. " unregistered")
+                table.remove(turtles, i)
+                break
+            end
+        end
+        
+        network.send(sender, "UNREGISTER_ACK", {})
     end
 end
 
 -- Check turtle health
 local function checkTurtleHealth()
     local now = os.clock()
+    local activeTurtles = {}
+    
     for i, turtle in ipairs(turtles) do
-        if now - turtle.lastSeen > 120 then  -- 2 minutes timeout
-            turtle.status = "offline"
+        -- Check if turtle should be marked offline
+        if now - turtle.lastSeen > config.TURTLE_OFFLINE_TIMEOUT then
+            if turtle.status ~= "offline" then
+                print("\n[Jobs] Turtle #" .. turtle.id .. " went offline")
+                turtle.status = "offline"
+            end
+        elseif turtle.status == "offline" then
+            -- Turtle came back online
+            turtle.status = "online"
+            print("\n[Jobs] Turtle #" .. turtle.id .. " came back online")
+        end
+        
+        -- Only keep turtles that have been seen recently
+        if now - turtle.lastSeen < config.TURTLE_REMOVE_TIMEOUT then
+            table.insert(activeTurtles, turtle)
+        else
+            print("\n[Jobs] Removing inactive turtle #" .. turtle.id)
         end
     end
+    
+    turtles = activeTurtles
 end
 
 -- Main function

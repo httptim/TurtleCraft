@@ -213,6 +213,12 @@ local function main()
     end
     
     -- Cleanup
+    if registered and jobsComputerID then
+        -- Tell Jobs Computer we're shutting down
+        network.send(jobsComputerID, "UNREGISTER", {})
+        sleep(0.1)  -- Give time for message to send
+    end
+    
     network.close()
     clear()
     print("Turtle stopped.")
