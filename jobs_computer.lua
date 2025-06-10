@@ -116,21 +116,10 @@ local function handleMessage(sender, message)
             jobsComputerID = os.getComputerID()
         })
         
-        -- Auto-discover if we have unidentified wired turtles
+        -- Auto-discover if we don't know this turtle's peripheral name yet
         if not turtleRecord.peripheralName then
-            -- Check for unmapped turtle peripherals
-            local unmappedPeripherals = {}
-            for _, name in ipairs(peripheral.getNames()) do
-                if peripheral.getType(name) == "turtle" and not wiredTurtles[name] then
-                    table.insert(unmappedPeripherals, name)
-                end
-            end
-            
-            if #unmappedPeripherals > 0 then
-                print("[Jobs] Auto-discovering wired turtle...")
-                -- Try to discover this specific turtle
-                os.queueEvent("start_discovery")
-            end
+            print("[Jobs] Running auto-discovery for new turtle...")
+            os.queueEvent("start_discovery")
         end
         
     elseif message.type == "HEARTBEAT" then
@@ -468,7 +457,7 @@ local function discoverWiredTurtles()
     end
     
     print("\nStarting discovery process...")
-    print("Using item transfer method...")
+    print("Using direct ID method...")
     print()
     
     -- Clear previous mappings
@@ -481,115 +470,24 @@ local function discoverWiredTurtles()
         -- Wrap the turtle
         local turtle = peripheral.wrap(peripheralName)
         if turtle then
-            -- Check if turtle has space
-            local hasSpace = false
-            local emptySlot = nil
-            for slot = 1, 16 do
-                local item = turtle.getItemDetail(slot)
-                if not item then
-                    hasSpace = true
-                    emptySlot = slot
-                    break
-                end
-            end
-            
-            if hasSpace then
-                -- Send discovery notification to all registered turtles
-                for _, turtleData in ipairs(turtles) do
-                    if turtleData.status == "online" then
-                        network.send(turtleData.id, "DISCOVERY_START", {
-                            peripheralName = peripheralName
-                        })
+            -- Get the turtle's computer ID directly
+            local turtleId = turtle.getID()
+            if turtleId then
+                print("  [OK] Turtle #" .. turtleId .. " identified as " .. peripheralName)
+                
+                -- Update mapping
+                wiredTurtles[peripheralName] = turtleId
+                
+                -- Update turtle record if it's registered
+                for i, t in ipairs(turtles) do
+                    if t.id == turtleId then
+                        t.peripheralName = peripheralName
+                        print("  [OK] Matched to registered turtle")
+                        break
                     end
-                end
-                
-                -- Wait a moment for turtles to prepare
-                sleep(0.5)
-                
-                local success = false
-                
-                -- Try to export an item from ME system
-                if me_bridge.isConnected() then
-                    -- Export one cobblestone (or any common item) to the turtle
-                    -- First check what items are available
-                    local testItem = "minecraft:cobblestone"
-                    local available = me_bridge.getItem(testItem)
-                    
-                    if not available or available.amount == 0 then
-                        -- Try to find any available item
-                        local items = me_bridge.listItems()
-                        if items and #items > 0 then
-                            testItem = items[1].name
-                        end
-                    end
-                    
-                    -- Export to the turtle's direction (assuming turtles are around the ME Bridge)
-                    local directions = {"up", "down", "north", "south", "east", "west"}
-                    for _, dir in ipairs(directions) do
-                        local exported = me_bridge.exportItem(testItem, 1, dir)
-                        if exported and exported > 0 then
-                            -- Check if this turtle got the item
-                            sleep(0.5)
-                            local newItem = turtle.getItemDetail(emptySlot)
-                            if newItem then
-                                print("  Sent discovery item (" .. testItem .. ") to " .. peripheralName)
-                                success = true
-                                
-                                -- Wait for turtle to report back
-                                local timeout = os.startTimer(3)
-                                local identified = false
-                                
-                                while not identified do
-                                    local event, p1, p2, p3 = os.pullEvent()
-                                    if event == "rednet_message" then
-                                        local sender, message, protocol = p1, p2, p3
-                                        if message and message.type == "DISCOVERY_RESPONSE" and 
-                                           message.data.peripheralName == peripheralName then
-                                            os.cancelTimer(timeout)
-                                            print("  [OK] Turtle #" .. sender .. " identified as " .. peripheralName)
-                                            
-                                            -- Update mapping
-                                            wiredTurtles[peripheralName] = sender
-                                            
-                                            -- Update turtle record
-                                            for i, t in ipairs(turtles) do
-                                                if t.id == sender then
-                                                    t.peripheralName = peripheralName
-                                                    break
-                                                end
-                                            end
-                                            
-                                            identified = true
-                                        end
-                                    elseif event == "timer" and p1 == timeout then
-                                        print("  [X] Timeout waiting for response")
-                                        break
-                                    end
-                                end
-                                
-                                -- Import the item back to ME
-                                sleep(0.5)
-                                local imported = me_bridge.importItem(testItem, 1, dir)
-                                if imported and imported > 0 then
-                                    print("  Returned discovery item to ME system")
-                                end
-                                
-                                break
-                            else
-                                -- Import it back since this turtle didn't get it
-                                me_bridge.importItem(testItem, 1, dir)
-                            end
-                        end
-                    end
-                else
-                    print("  [!] ME Bridge not connected - cannot send discovery items")
-                end
-                
-                if not success then
-                    print("  [X] Could not send item to " .. peripheralName)
                 end
             else
-                print("  [!] Turtle " .. peripheralName .. " inventory is full")
+                print("  [X] Could not get ID from peripheral")
             end
         else
             print("  [X] Failed to wrap peripheral")
@@ -607,9 +505,8 @@ local function discoverWiredTurtles()
     if mappedCount == 0 then
         print("  No turtles were mapped.")
         print("  Make sure:")
-        print("  - Turtles are running and registered")
-        print("  - ME Bridge is connected with items")
-        print("  - Wired modems are activated")
+        print("  - Turtles are connected via wired modems")
+        print("  - Wired modems are activated (red ring)")
     end
     
     print("\nPress any key to continue...")

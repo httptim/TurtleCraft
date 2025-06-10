@@ -8,8 +8,6 @@ local network = dofile("lib/network.lua")
 local running = true
 local jobsComputerID = nil
 local registered = false
-local discoveryMode = false
-local expectedPeripheral = nil
 
 -- Clear screen helper
 local function clear()
@@ -135,49 +133,11 @@ local function handleMessage(sender, message)
         })
         
     elseif message.type == "DISCOVERY_START" and sender == jobsComputerID then
-        -- Jobs Computer is about to send a discovery item
-        discoveryMode = true
-        expectedPeripheral = message.data.peripheralName
-        print("\n[Turtle] Entering discovery mode for " .. expectedPeripheral)
-        
-    elseif message.type == "DISCOVERY_ACTION" and sender == jobsComputerID then
-        -- Legacy discovery action support
-        print("\n[Turtle] Discovery action not implemented")
+        -- Legacy discovery message - no longer needed
+        print("\n[Turtle] Discovery now uses direct ID method")
     end
 end
 
--- Check for newly received items during discovery
-local function checkDiscoveryItem()
-    if not discoveryMode or not expectedPeripheral then
-        return
-    end
-    
-    -- Check all slots for new items
-    for slot = 1, 16 do
-        local item = turtle.getItemDetail(slot)
-        if item and item.count > 0 then
-            -- We found an item - report back to Jobs Computer
-            print("[Turtle] Received discovery item in slot " .. slot)
-            
-            network.send(jobsComputerID, "DISCOVERY_RESPONSE", {
-                peripheralName = expectedPeripheral
-            })
-            
-            -- Clear discovery mode
-            discoveryMode = false
-            expectedPeripheral = nil
-            
-            -- Drop the item back down for Jobs Computer to collect
-            turtle.select(slot)
-            turtle.dropDown()
-            print("[Turtle] Dropped discovery item for return")
-            
-            return true
-        end
-    end
-    
-    return false
-end
 
 -- Request items from ME system
 local function requestItems()
@@ -351,7 +311,6 @@ local function main()
     -- Main loop
     local lastDisplay = os.clock()
     local lastHeartbeat = os.clock()
-    local lastDiscoveryCheck = os.clock()
     
     while running do
         -- Check for messages
@@ -364,12 +323,6 @@ local function main()
         if registered and os.clock() - lastHeartbeat > config.HEARTBEAT_INTERVAL then
             sendHeartbeat()
             lastHeartbeat = os.clock()
-        end
-        
-        -- Check for discovery items
-        if discoveryMode and os.clock() - lastDiscoveryCheck > 0.2 then
-            checkDiscoveryItem()
-            lastDiscoveryCheck = os.clock()
         end
         
         -- Update display
