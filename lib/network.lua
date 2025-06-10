@@ -35,10 +35,21 @@ function network.init(config)
         if state.wirelessModem then
             rednet.open(config.PERIPHERALS.WIRELESS_MODEM)
             logger.info("Opened wireless modem: " .. config.PERIPHERALS.WIRELESS_MODEM, "NETWORK")
+            
+            -- Verify it's actually open
+            if rednet.isOpen(config.PERIPHERALS.WIRELESS_MODEM) then
+                logger.info("Wireless modem verified open", "NETWORK")
+            else
+                logger.error("Wireless modem failed to open properly", "NETWORK")
+                return false
+            end
         else
             logger.error("Failed to wrap wireless modem", "NETWORK")
             return false
         end
+    else
+        logger.error("No wireless modem configured", "NETWORK")
+        return false
     end
     
     -- Find and open wired modem (if available)
@@ -52,7 +63,9 @@ function network.init(config)
     
     -- Host protocol
     if state.wirelessModem then
-        rednet.host(state.protocol, config.COMPUTER_TYPE .. "_" .. os.getComputerID())
+        local hostname = config.COMPUTER_TYPE .. "_" .. os.getComputerID()
+        rednet.host(state.protocol, hostname)
+        logger.info("Hosting on protocol '" .. state.protocol .. "' with hostname '" .. hostname .. "'", "NETWORK")
     end
     
     state.initialized = true
@@ -255,52 +268,77 @@ function network.findComputers(computerType, timeout)
     timeout = timeout or 2
     local found = {}
     
-    -- If looking for a specific type, use the hostname pattern
-    if computerType then
-        -- Look for computers with hostname starting with computerType
-        local hostname = computerType .. "_"
-        local computers = rednet.lookup(state.protocol, hostname)
-        
-        -- rednet.lookup with hostname returns nil or the computer ID(s)
-        if computers then
-            if type(computers) == "table" then
-                for _, id in ipairs(computers) do
-                    table.insert(found, id)
-                end
-            elseif type(computers) == "number" then
-                table.insert(found, computers)
-            end
+    -- Get all computers on our protocol first
+    local allComputers = rednet.lookup(state.protocol)
+    
+    if allComputers then
+        -- Convert single result to table
+        if type(allComputers) == "number" then
+            allComputers = {allComputers}
         end
         
-        -- Also check for exact computer type match (without ID suffix)
-        local exactMatch = rednet.lookup(state.protocol, computerType)
-        if exactMatch then
-            if type(exactMatch) == "table" then
-                for _, id in ipairs(exactMatch) do
-                    if not utils.tableContains(found, id) then
-                        table.insert(found, id)
+        -- If we have computers, process them
+        if type(allComputers) == "table" then
+            for hostname, id in pairs(allComputers) do
+                -- hostname might be the key or value depending on lookup result
+                local computerId = nil
+                local hostString = nil
+                
+                if type(hostname) == "number" then
+                    -- ID is the key, need to do individual lookup
+                    computerId = hostname
+                    local hosts = rednet.lookup(state.protocol)
+                    -- For each computer, check if it matches our type
+                    if computerType then
+                        -- Try specific hostname lookup
+                        local specificHost = rednet.lookup(state.protocol, computerType .. "_" .. computerId)
+                        if specificHost == computerId then
+                            table.insert(found, computerId)
+                        end
+                    else
+                        -- No type filter, add all
+                        table.insert(found, computerId)
+                    end
+                elseif type(id) == "number" then
+                    -- Normal case: hostname is string, id is number
+                    computerId = id
+                    hostString = hostname
+                    
+                    if computerType then
+                        -- Check if hostname matches pattern
+                        if string.sub(hostString, 1, #computerType + 1) == computerType .. "_" then
+                            table.insert(found, computerId)
+                        end
+                    else
+                        -- No type filter, add all
+                        table.insert(found, computerId)
                     end
                 end
-            elseif type(exactMatch) == "number" then
-                if not utils.tableContains(found, exactMatch) then
-                    table.insert(found, exactMatch)
-                end
-            end
-        end
-    else
-        -- Look up all computers on protocol
-        local computers = rednet.lookup(state.protocol)
-        
-        if computers then
-            if type(computers) == "table" then
-                for _, id in ipairs(computers) do
-                    table.insert(found, id)
-                end
-            elseif type(computers) == "number" then
-                table.insert(found, computers)
             end
         end
     end
+    
+    -- Also try direct lookup with type pattern
+    if computerType and #found == 0 then
+        -- Try lookup with exact hostname pattern
+        for i = 0, 255 do  -- Check reasonable computer ID range
+            local hostname = computerType .. "_" .. i
+            local result = rednet.lookup(state.protocol, hostname)
+            if result then
+                if type(result) == "number" then
+                    table.insert(found, result)
+                elseif type(result) == "table" then
+                    for _, id in ipairs(result) do
+                        if not utils.tableContains(found, id) then
+                            table.insert(found, id)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    logger.debug("Found " .. #found .. " computers of type: " .. (computerType or "any"), "NETWORK")
     
     return found
 end
@@ -413,6 +451,7 @@ end
 
 -- Default ping handler
 network.on("PING", function(sender, message)
+    logger.debug("Received PING from " .. sender, "NETWORK")
     network.respond(message, "PONG", {
         timestamp = message.data.timestamp,
         computerID = os.getComputerID()

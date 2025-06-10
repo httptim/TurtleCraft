@@ -120,14 +120,45 @@ end
 local function connectToJobsComputer()
     logger.info("Searching for Jobs Computer...", "MAIN")
     
+    -- First, let's check what's available on the network
+    local allComputers = rednet.lookup(CONFIG.REDNET_PROTOCOL)
+    if allComputers then
+        logger.info("All computers on protocol: " .. textutils.serialize(allComputers), "MAIN")
+    else
+        logger.warn("No computers found on protocol: " .. CONFIG.REDNET_PROTOCOL, "MAIN")
+    end
+    
     local maxAttempts = 10
     local attempt = 0
     
     while attempt < maxAttempts and not state.connected do
         attempt = attempt + 1
         
-        -- Find jobs computers
+        -- Try direct connection to known Jobs Computer ID
+        if CONFIG.JOBS_COMPUTER_ID then
+            logger.info("Trying direct connection to Jobs Computer ID: " .. CONFIG.JOBS_COMPUTER_ID, "MAIN")
+            
+            -- Try to ping it directly
+            local success, rtt = network.ping(CONFIG.JOBS_COMPUTER_ID)
+            
+            if success then
+                state.jobsComputerID = CONFIG.JOBS_COMPUTER_ID
+                state.connected = true
+                state.systemStatus.jobs_computer = "ONLINE"
+                logger.info(string.format("Connected to Jobs Computer (RTT: %.3fs)", rtt), "MAIN")
+                
+                -- Request initial status
+                network.send(state.jobsComputerID, MESSAGE_TYPES.SYSTEM_STATUS, {})
+                
+                return true
+            else
+                logger.warn("Jobs Computer ID " .. CONFIG.JOBS_COMPUTER_ID .. " not responding", "MAIN")
+            end
+        end
+        
+        -- Find jobs computers by type
         local jobsComputers = network.findComputers("jobs")
+        logger.debug("Found " .. #jobsComputers .. " jobs computers", "MAIN")
         
         if #jobsComputers > 0 then
             state.jobsComputerID = jobsComputers[1]
