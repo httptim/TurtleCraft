@@ -183,6 +183,7 @@ local function handleMessage(sender, message)
         for _, turtle in ipairs(turtles) do
             if turtle.id == sender and turtle.peripheralName then
                 turtlePeripheral = turtle.peripheralName
+                print("[Jobs] Found peripheral name in turtles array: " .. turtlePeripheral)
                 break
             end
         end
@@ -192,6 +193,7 @@ local function handleMessage(sender, message)
             for peripheral, id in pairs(wiredTurtles) do
                 if id == sender then
                     turtlePeripheral = peripheral
+                    print("[Jobs] Found peripheral name in wiredTurtles: " .. turtlePeripheral)
                     break
                 end
             end
@@ -206,8 +208,12 @@ local function handleMessage(sender, message)
             return
         end
         
+        print("[Jobs] About to export " .. count .. "x " .. itemName .. " to " .. turtlePeripheral)
+        
         -- Export items from ME to turtle using peripheral name
         local exported, err = me_bridge.exportItemToPeripheral(itemName, count, turtlePeripheral)
+        
+        print("[Jobs] Export result: exported=" .. tostring(exported) .. ", err=" .. tostring(err))
         
         if exported and exported > 0 then
             network.send(sender, "ITEMS_RESPONSE", {
@@ -782,8 +788,32 @@ local function main()
             -- Timer expired, continue loop
         elseif event == "start_discovery" then
             os.cancelTimer(timer)
-            -- Run discovery in background
-            discoverWiredTurtles()
+            -- Run quick discovery without UI
+            print("[Jobs] Running auto-discovery...")
+            local foundNew = false
+            for _, name in ipairs(peripheral.getNames()) do
+                if peripheral.getType(name) == "turtle" and not wiredTurtles[name] then
+                    local turtle = peripheral.wrap(name)
+                    if turtle then
+                        local turtleId = turtle.getID()
+                        if turtleId then
+                            wiredTurtles[name] = turtleId
+                            -- Update turtle record
+                            for i, t in ipairs(turtles) do
+                                if t.id == turtleId then
+                                    t.peripheralName = name
+                                    print("[Jobs] Mapped Turtle #" .. turtleId .. " to " .. name)
+                                    foundNew = true
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            if not foundNew then
+                print("[Jobs] No new turtles found to map")
+            end
         else
             os.cancelTimer(timer)
         end

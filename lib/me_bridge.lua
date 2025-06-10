@@ -146,9 +146,15 @@ function me_bridge.exportItemToPeripheral(itemName, count, peripheralName)
     end
     
     local item = {name = itemName, count = count}
-    local ok, result = pcall(bridge.exportItemToPeripheral, bridge, item, peripheralName)
+    local ok, result = pcall(function()
+        return bridge.exportItemToPeripheral(item, peripheralName)
+    end)
     if not ok then
         return nil, tostring(result)
+    end
+    
+    if config.DEBUG then
+        print("[ME Bridge] Raw export result: " .. tostring(result) .. " (type: " .. type(result) .. ")")
     end
     
     -- Handle different return types from the ME Bridge
@@ -181,7 +187,9 @@ function me_bridge.importItemFromPeripheral(itemName, count, peripheralName)
     end
     
     local item = {name = itemName, count = count}
-    local ok, result = pcall(bridge.importItemFromPeripheral, bridge, item, peripheralName)
+    local ok, result = pcall(function()
+        return bridge.importItemFromPeripheral(item, peripheralName)
+    end)
     if not ok then
         return nil, tostring(result)
     end
