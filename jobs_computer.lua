@@ -8,6 +8,7 @@ local me_bridge = dofile("lib/me_bridge.lua")
 -- State
 local running = true
 local turtles = {}
+local wiredTurtles = {}  -- Maps peripheral names to turtle IDs
 local meConnected = false
 local meStatus = {
     connected = false,
@@ -50,12 +51,29 @@ local function displayStatus()
             local offlineTime = math.floor(now - turtle.lastSeen)
             status = status .. " - " .. offlineTime .. "s ago"
         end
-        print("  - Turtle #" .. turtle.id .. " (" .. status .. ")")
+        local wiredInfo = ""
+        if turtle.peripheralName then
+            wiredInfo = " [" .. turtle.peripheralName .. "]"
+        end
+        print("  - Turtle #" .. turtle.id .. " (" .. status .. ")" .. wiredInfo)
+    end
+    
+    -- Show wired turtles awaiting discovery
+    local wiredCount = 0
+    for _ in pairs(peripheral.getNames()) do
+        local pType = peripheral.getType(_)
+        if pType == "turtle" then
+            wiredCount = wiredCount + 1
+        end
+    end
+    if wiredCount > 0 then
+        print("\nWired Turtles: " .. wiredCount .. " detected")
     end
     print()
     print("Commands:")
     print("  I - Show ME Items")
-    print("  S - Search Items") 
+    print("  S - Search Items")
+    print("  D - Discover wired turtles")
     print("  Q - Quit")
 end
 
@@ -84,7 +102,8 @@ local function handleMessage(sender, message)
             table.insert(turtles, {
                 id = sender,
                 status = "online",
-                lastSeen = os.clock()
+                lastSeen = os.clock(),
+                peripheralName = nil  -- Will be set during discovery
             })
         end
         
@@ -224,6 +243,22 @@ local function handleMessage(sender, message)
                 item = itemName,
                 count = 0
             })
+        end
+        
+    elseif message.type == "DISCOVERY_RESPONSE" then
+        -- Turtle is reporting it received the discovery item
+        local peripheralName = message.data.peripheralName
+        print("\n[Jobs] Turtle #" .. sender .. " identified as " .. peripheralName)
+        
+        -- Update mapping
+        wiredTurtles[peripheralName] = sender
+        
+        -- Update turtle record
+        for i, turtle in ipairs(turtles) do
+            if turtle.id == sender then
+                turtle.peripheralName = peripheralName
+                break
+            end
         end
     end
 end
@@ -376,6 +411,124 @@ local function searchMEItems()
     os.pullEvent("key")
 end
 
+-- Discover wired turtles
+local function discoverWiredTurtles()
+    clear()
+    print("Wired Turtle Discovery")
+    print("=====================")
+    print()
+    print("Scanning for wired turtles...")
+    print()
+    
+    local turtlePeripherals = {}
+    
+    -- Find all turtle peripherals
+    for _, name in ipairs(peripheral.getNames()) do
+        if peripheral.getType(name) == "turtle" then
+            table.insert(turtlePeripherals, name)
+            print("Found turtle peripheral: " .. name)
+        end
+    end
+    
+    if #turtlePeripherals == 0 then
+        print("\nNo wired turtles found!")
+        print("Make sure turtles are connected via wired modems.")
+        print("\nPress any key to continue...")
+        os.pullEvent("key")
+        return
+    end
+    
+    print("\nStarting discovery process...")
+    print("Sending discovery items to each turtle...")
+    print()
+    
+    -- For each turtle peripheral
+    for _, peripheralName in ipairs(turtlePeripherals) do
+        print("Testing " .. peripheralName .. "...")
+        
+        -- Wrap the turtle
+        local turtle = peripheral.wrap(peripheralName)
+        if turtle then
+            -- Send discovery notification to all registered turtles
+            for _, turtleData in ipairs(turtles) do
+                if turtleData.status == "online" then
+                    network.send(turtleData.id, "DISCOVERY_START", {
+                        peripheralName = peripheralName
+                    })
+                end
+            end
+            
+            -- Wait a moment for turtles to prepare
+            sleep(0.5)
+            
+            -- Try to drop an item into the turtle's inventory
+            -- First, check if turtle has space
+            local hasSpace = false
+            for slot = 1, 16 do
+                if turtle.getItemCount(slot) == 0 then
+                    hasSpace = true
+                    break
+                end
+            end
+            
+            if hasSpace then
+                -- Try to push a single cobblestone (or any item) as a marker
+                -- This assumes Jobs Computer has items in its own inventory
+                -- or can get them from ME system
+                local success = false
+                
+                -- Jobs Computer needs to have a chest or inventory peripheral
+                -- Try to find a chest to pull items from
+                local chest = peripheral.find("minecraft:chest") or peripheral.find("inventory")
+                if chest then
+                    -- Pull one item from chest to turtle
+                    for slot = 1, chest.size() do
+                        local item = chest.getItemDetail(slot)
+                        if item and item.count > 0 then
+                            -- Use turtle peripheral to pull from chest
+                            success = turtle.pullItems(peripheral.getName(chest), slot, 1)
+                            if success then
+                                print("  Sent discovery item to " .. peripheralName)
+                                break
+                            end
+                        end
+                    end
+                end
+                
+                if not success and me_bridge.isConnected() then
+                    -- Try to export directly from ME to turtle
+                    -- This requires the turtle to be adjacent to the ME Bridge
+                    print("  Trying ME system export...")
+                    local exported = me_bridge.exportItem("minecraft:cobblestone", 1, peripheralName)
+                    if exported and exported > 0 then
+                        print("  Sent ME item to " .. peripheralName)
+                        success = true
+                    end
+                end
+                
+                if not success then
+                    print("  WARNING: Could not send item to " .. peripheralName)
+                    print("  Make sure Jobs Computer has items to send")
+                end
+            else
+                print("  WARNING: Turtle " .. peripheralName .. " inventory is full")
+            end
+            
+            -- Wait for response
+            sleep(1)
+        end
+    end
+    
+    print("\nDiscovery complete!")
+    print("\nMapped turtles:")
+    for peripheral, turtleId in pairs(wiredTurtles) do
+        print("  " .. peripheral .. " -> Turtle #" .. turtleId)
+    end
+    
+    print("\nPress any key to continue...")
+    os.pullEvent("key")
+end
+
 -- Main function
 local function main()
     clear()
@@ -446,6 +599,8 @@ local function main()
                 showMEItems()
             elseif p1 == keys.s then
                 searchMEItems()
+            elseif p1 == keys.d then
+                discoverWiredTurtles()
             end
         elseif event == "timer" and p1 == timer then
             -- Timer expired, continue loop
