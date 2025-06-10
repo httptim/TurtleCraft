@@ -1,7 +1,7 @@
 # TurtleCraft Progress Report
 
 ## Summary
-Successfully created a working network implementation for the distributed crafting system. The core networking issues have been resolved, and all three components (Jobs Computer, Main Computer, and Turtles) can now communicate reliably.
+Successfully completed Phase 1 (Core Infrastructure & Networking) and Phase 2 (ME Bridge Integration) of the distributed crafting system. All three components communicate reliably, and the Jobs Computer can now interact with Applied Energistics 2 ME systems.
 
 ## Key Discoveries
 
@@ -54,11 +54,15 @@ end
 - Automatically removes offline turtles
 - Shows turtle status (online/offline with time)
 - Responds to status requests
+- ME Bridge integration (when available)
+- Interactive ME commands (I - show items, S - search)
+- Handles item transfer requests from turtles
 
 ### ✅ Main Computer  
 - Automatically finds Jobs Computer on network
 - Shows connection status
 - Displays active/total turtle count
+- Shows ME system status (connected/items count)
 - Updates every 5 seconds
 - Reconnect command (R key)
 
@@ -68,73 +72,92 @@ end
 - Graceful shutdown/unregister
 - Re-registration command (R key)
 - Fuel level display and refuel command (F key)
+- Get items from ME system (G key)
+- Deposit items to ME system (D key)
 
 ### ✅ Installation & Setup
-- Updated installer with new file list
+- Updated installer with correct file list (9 files)
 - Startup menu for easy program selection
 - Network test tool included
+- ME Bridge test tool included
 - Clear setup instructions
 
 ## Current Limitations
 
-1. **No ME Bridge Integration** - Jobs Computer doesn't interact with ME system yet
-2. **No Job Queue** - Can't actually assign crafting jobs
-3. **No Recipe System** - No recipe definitions or crafting logic
-4. **No Persistence** - Turtle list is lost on Jobs Computer restart
-5. **Basic Text UI** - No fancy graphics or monitors
+1. **No Job Queue** - Can't actually assign crafting jobs
+2. **No Recipe System** - No recipe definitions or crafting logic
+3. **No Persistence** - Turtle list is lost on Jobs Computer restart
+4. **Basic Text UI** - No fancy graphics or monitors
+5. **Fixed Transfer Direction** - ME Bridge assumes turtle is above for item transfers
+
+## Completed Phases
+
+### ✅ Phase 1: Core Infrastructure & Networking
+- Network library with rednet wrapper
+- Service discovery system
+- Heartbeat and health monitoring
+- Auto-reconnection logic
+- Debug mode and logging
+
+### ✅ Phase 2: ME Bridge Integration
+- ME Bridge library with full API
+- Item listing and searching
+- Item export/import functionality
+- Stock level monitoring
+- Storage and energy status
+- Interactive testing tools
 
 ## Next Steps (Recommended Order)
 
-### Phase 2: ME Bridge Integration
-1. Create `lib/me_bridge.lua` for ME system interaction
-2. Add item listing and searching
-3. Implement item export/import to turtles
-4. Add stock level monitoring
+### Phase 3: Recipe System & Dependency Resolution
+1. Create `recipes.lua` with recipe definitions
+2. Create `lib/crafting.lua` for crafting logic
+3. Create `lib/dependency.lua` for dependency resolution
+4. Add recipe validation and pattern matching
+5. Implement turtle-side crafting execution
 
-### Phase 3: Job System
-1. Create job queue data structure
-2. Add job assignment logic
-3. Implement job status tracking
-4. Add job completion/failure handling
+### Phase 4: Job Queue & Distribution System
+1. Create `lib/job_manager.lua` for job queue management
+2. Add priority queue implementation
+3. Implement job assignment to turtles
+4. Add job status tracking and completion handling
+5. Create load balancing system
 
-### Phase 4: Recipe System
-1. Create recipe configuration format
-2. Add recipe validation
-3. Implement crafting logic in turtles
-4. Add dependency checking
+### Phase 5: Basic Text Interfaces
+1. Add crafting commands to Main Computer
+2. Create job queue display
+3. Add recipe search functionality
+4. Implement job status monitoring
 
-### Phase 5: Persistence
-1. Save turtle registry to file
-2. Save job queue state
-3. Restore on startup
-4. Handle partial state recovery
-
-### Phase 6: Enhanced UI
-1. Better status displays
-2. Job queue visualization
-3. Progress indicators
-4. Monitor support
+### Phase 6: Persistence & Advanced Features
+1. Save/restore turtle registry
+2. Persist job queue state
+3. Add configuration hot-reload
+4. Implement error recovery mechanisms
 
 ## Technical Details
 
-### File Structure (Simplified)
+### File Structure (Current)
 ```
 /
-├── config.lua           # Configuration (protocol, timeouts)
+├── config.lua           # Configuration (protocol, timeouts, ME Bridge)
 ├── lib/
-│   └── network.lua      # Network library (rednet wrapper)
-├── jobs_computer.lua    # Central manager
-├── main_computer.lua    # User interface
-├── turtle.lua           # Turtle client
+│   ├── network.lua      # Network library (rednet wrapper)
+│   └── me_bridge.lua    # ME Bridge interface library
+├── jobs_computer.lua    # Central manager with ME integration
+├── main_computer.lua    # User interface with ME status
+├── turtle.lua           # Turtle client with item transfer
 ├── startup.lua          # Menu selector
-└── test_network.lua     # Network diagnostic tool
+├── test_network.lua     # Network diagnostic tool
+└── test_me_bridge.lua   # ME Bridge testing tool
 ```
 
 ### Network Protocol
 - Protocol name: "turtlecraft"
 - Service discovery: Jobs Computer hosts as "jobs"
 - Message format: `{type, data, sender, time}`
-- Message types: PING/PONG, REGISTER, HEARTBEAT, STATUS_REQUEST, UNREGISTER
+- Core messages: PING/PONG, REGISTER, HEARTBEAT, STATUS_REQUEST, UNREGISTER
+- ME messages: REQUEST_ITEMS, ITEMS_RESPONSE, DEPOSIT_ITEMS, DEPOSIT_RESPONSE, CHECK_STOCK, STOCK_RESPONSE
 
 ### Configuration Options
 ```lua
@@ -144,10 +167,25 @@ HEARTBEAT_INTERVAL = 30           -- Turtle heartbeat frequency
 TURTLE_OFFLINE_TIMEOUT = 60       -- Mark offline after 1 minute
 TURTLE_REMOVE_TIMEOUT = 180       -- Remove from list after 3 minutes
 DEBUG = true                      -- Show network messages
+-- ME_BRIDGE_NAME = "meBridge_0"  -- Optional: specify ME Bridge peripheral
 ```
 
-## Conclusion
+## Current Status
 
-The foundation is now solid. The network layer works reliably, computers can find each other automatically, and the system properly handles disconnections. This provides a stable base for adding the actual crafting functionality in subsequent phases.
+**Phase 1 & 2 Complete**: The system has a solid networking foundation and full ME Bridge integration. All components can communicate reliably, turtles can request and deposit items, and the Jobs Computer provides good visibility into the ME system status.
 
-The key insight was to simplify and follow CC:Tweaked's rednet documentation exactly, rather than trying to build a complex custom protocol on top of it. The built-in service discovery via `rednet.host()` and `rednet.lookup()` handles the computer discovery problem elegantly.
+**Ready for Phase 3**: The next step is to implement the recipe system and dependency resolution, which will enable actual crafting operations. This will involve defining recipe formats, creating crafting logic, and implementing dependency checking.
+
+## Key Insights
+
+1. **Simplicity wins**: Using rednet's built-in service discovery was much more reliable than custom protocols
+2. **Event handling**: Proper timer-based event loops are essential in CC:Tweaked
+3. **ME Bridge integration**: The Advanced Peripherals ME Bridge provides a clean API for ME system interaction
+4. **Modular design**: Separating concerns into libraries (network, ME bridge) makes the code maintainable
+
+## Testing the Current System
+
+1. **Network Test**: Run `test_network` on any computer to verify connectivity
+2. **ME Bridge Test**: Run `test_me_bridge` on Jobs Computer to test ME integration
+3. **Item Transfer**: Use G/D keys on turtle to test item requests/deposits
+4. **Status Monitoring**: All computers show real-time status updates
