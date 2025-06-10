@@ -61,71 +61,104 @@ end
 function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
     local received = {}
     
+    -- First, send all item requests
+    print("Sending item requests to Jobs Computer...")
     for itemName, count in pairs(itemsNeeded) do
-        print("Requesting " .. count .. "x " .. itemName .. "...")
-        
+        print("  Requesting " .. count .. "x " .. itemName)
         network.send(jobsComputerID, "REQUEST_ITEMS", {
             item = itemName,
             count = count
         })
-        
-        -- Wait for response
-        local timeout = os.startTimer(10)
-        local success = false
-        
-        while not success do
-            local event, p1, p2, p3 = os.pullEvent()
-            if event == "timer" and p1 == timeout then
-                return nil, "Timeout waiting for " .. itemName
-            elseif event == "rednet_message" then
-                local sender, message = p1, p2
-                if sender == jobsComputerID and message and message.type == "ITEMS_RESPONSE" then
-                    os.cancelTimer(timeout)
-                    if message.data.success then
-                        received[itemName] = message.data.count
-                        success = true
-                    else
-                        return nil, "Failed to get " .. itemName .. ": " .. (message.data.error or "Unknown")
-                    end
-                end
-            end
-        end
-        
-        -- Wait for items to actually arrive in inventory
-        print("Waiting for " .. count .. "x " .. itemName .. " to arrive...")
-        local waitStart = os.clock()
-        local itemsArrived = false
-        
-        while os.clock() - waitStart < 5 do  -- Wait up to 5 seconds
-            -- Count how many of this item we have
-            local totalCount = 0
-            for slot = 1, 16 do
-                local item = turtle.getItemDetail(slot)
-                if item and item.name == itemName then
-                    totalCount = totalCount + item.count
-                end
-            end
-            
-            if totalCount >= count then
-                print("  Items arrived! Total: " .. totalCount)
-                itemsArrived = true
-                break
-            end
-            
-            sleep(0.1)
-        end
-        
-        if not itemsArrived then
-            print("  WARNING: Items did not arrive in time!")
-        end
     end
     
-    -- Show what we received and where
-    print("\nFinal inventory after all requests:")
+    -- Wait for all responses
+    local itemsToReceive = {}
+    for itemName, count in pairs(itemsNeeded) do
+        itemsToReceive[itemName] = count
+    end
+    
+    local responseTimeout = os.startTimer(10)
+    while next(itemsToReceive) do
+        local event, p1, p2, p3 = os.pullEvent()
+        if event == "timer" and p1 == responseTimeout then
+            local missing = ""
+            for item, _ in pairs(itemsToReceive) do
+                missing = missing .. item .. ", "
+            end
+            return nil, "Timeout waiting for responses for: " .. missing
+        elseif event == "rednet_message" then
+            local sender, message = p1, p2
+            if sender == jobsComputerID and message and message.type == "ITEMS_RESPONSE" then
+                if message.data.success then
+                    local itemName = message.data.item
+                    received[itemName] = message.data.count
+                    itemsToReceive[itemName] = nil
+                    print("  Response received for " .. itemName)
+                else
+                    os.cancelTimer(responseTimeout)
+                    return nil, "Failed to get items: " .. (message.data.error or "Unknown")
+                end
+            end
+        end
+    end
+    os.cancelTimer(responseTimeout)
+    
+    -- Now wait for ALL items to actually arrive in inventory
+    print("\nWaiting for all items to arrive in inventory...")
+    local waitStart = os.clock()
+    local maxWaitTime = 10  -- 10 seconds for items to arrive
+    
+    while os.clock() - waitStart < maxWaitTime do
+        -- Check current inventory
+        local currentInventory = {}
+        for slot = 1, 16 do
+            local item = turtle.getItemDetail(slot)
+            if item then
+                currentInventory[item.name] = (currentInventory[item.name] or 0) + item.count
+            end
+        end
+        
+        -- Check if we have all required items
+        local allItemsPresent = true
+        local status = "Current inventory:"
+        for itemName, neededCount in pairs(itemsNeeded) do
+            local haveCount = currentInventory[itemName] or 0
+            status = status .. "\n  " .. itemName .. ": " .. haveCount .. "/" .. neededCount
+            if haveCount < neededCount then
+                allItemsPresent = false
+            end
+        end
+        
+        if allItemsPresent then
+            print(status)
+            print("\nAll items have arrived!")
+            break
+        end
+        
+        -- Show progress every second
+        if math.floor(os.clock() - waitStart) % 1 == 0 then
+            print(status)
+        end
+        
+        sleep(0.1)
+    end
+    
+    -- Final inventory check and display
+    local finalInventory = {}
+    print("\nFinal inventory:")
     for slot = 1, 16 do
         local item = turtle.getItemDetail(slot)
         if item then
             print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
+            finalInventory[item.name] = (finalInventory[item.name] or 0) + item.count
+        end
+    end
+    
+    -- Verify we have everything we need
+    for itemName, neededCount in pairs(itemsNeeded) do
+        local haveCount = finalInventory[itemName] or 0
+        if haveCount < neededCount then
+            return nil, "Missing items: " .. itemName .. " (have " .. haveCount .. ", need " .. neededCount .. ")"
         end
     end
     
@@ -165,32 +198,56 @@ function crafting_v2.arrangeCraftingGrid(recipe)
         return false, "Missing required items for recipe"
     end
     
+    -- First, we need to consolidate items that might be spread across slots
+    print("\nConsolidating items...")
+    local itemSlots = {}  -- Track which slots contain which items
+    
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item then
+            if not itemSlots[item.name] then
+                itemSlots[item.name] = {}
+            end
+            table.insert(itemSlots[item.name], {slot = slot, count = item.count})
+        end
+    end
+    
     -- Now arrange items for crafting
     -- For each required slot, find the item and place EXACTLY the amount needed
     for targetSlot, itemName in pairs(slots) do
         print("Need to place " .. itemName .. " in slot " .. targetSlot)
         local placed = false
         
-        -- Find the item in any slot
-        for searchSlot = 1, 16 do
-            turtle.select(searchSlot)
-            local item = turtle.getItemDetail()
-            if item and item.name == itemName then
-                print("  Found " .. item.name .. " in slot " .. searchSlot)
-                -- Move exactly 1 item to the target slot
-                if searchSlot ~= targetSlot then
+        -- Check if target slot already has the right item
+        turtle.select(targetSlot)
+        local existing = turtle.getItemDetail()
+        if existing and existing.name == itemName then
+            print("  Slot " .. targetSlot .. " already has " .. itemName)
+            placed = true
+            -- Ensure we only have 1 item
+            if existing.count > 1 then
+                print("  Keeping only 1 item, moving " .. (existing.count - 1) .. " extras")
+                -- Find empty slot for extras
+                for emptySlot = 1, 16 do
+                    if emptySlot ~= targetSlot and not slots[emptySlot] then
+                        turtle.select(targetSlot)
+                        if turtle.transferTo(emptySlot, existing.count - 1) then
+                            break
+                        end
+                    end
+                end
+            end
+        else
+            -- Need to find and move the item
+            local sourceSlots = itemSlots[itemName] or {}
+            for _, source in ipairs(sourceSlots) do
+                if source.slot ~= targetSlot then
+                    turtle.select(source.slot)
                     if turtle.transferTo(targetSlot, 1) then
                         placed = true
-                        print("  Transferred 1 item to slot " .. targetSlot)
+                        print("  Moved 1x " .. itemName .. " from slot " .. source.slot .. " to slot " .. targetSlot)
                         break
-                    else
-                        print("  Failed to transfer!")
                     end
-                else
-                    -- Already in the right slot
-                    placed = true
-                    print("  Already in correct slot")
-                    break
                 end
             end
         end
@@ -200,24 +257,60 @@ function crafting_v2.arrangeCraftingGrid(recipe)
         end
     end
     
-    -- Verify the setup and ensure only recipe slots have items
-    print("Verifying crafting setup...")
+    -- Verify the setup and clear non-recipe slots
+    print("\nVerifying crafting setup and clearing non-recipe slots...")
     for slot = 1, 16 do
         turtle.select(slot)
-        local count = turtle.getItemCount()
-        if count > 0 then
-            local item = turtle.getItemDetail()
+        local item = turtle.getItemDetail()
+        if item then
             if slots[slot] then
-                print("  Slot " .. slot .. ": " .. item.name .. " x" .. count .. " [RECIPE]")
-                -- Make sure we have exactly 1 item in recipe slots
-                if count > 1 then
-                    print("  WARNING: Slot " .. slot .. " has " .. count .. " items, dropping extras")
-                    turtle.drop(count - 1)
+                print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count .. " [RECIPE]")
+                -- Make sure we have exactly 1 item in recipe slots  
+                if item.count > 1 then
+                    print("  WARNING: Slot " .. slot .. " has " .. item.count .. " items, need exactly 1")
+                    -- Try to move extras to an empty slot first
+                    local moved = false
+                    for emptySlot = 1, 16 do
+                        if not slots[emptySlot] and turtle.transferTo(emptySlot, item.count - 1) then
+                            print("  Moved " .. (item.count - 1) .. " extras to slot " .. emptySlot)
+                            moved = true
+                            break
+                        end
+                    end
+                    if not moved then
+                        -- No space, we'll have to drop them temporarily
+                        print("  No empty slots, dropping " .. (item.count - 1) .. " extras")
+                        turtle.drop(item.count - 1)
+                    end
                 end
             else
-                print("  Slot " .. slot .. ": " .. item.name .. " x" .. count .. " [EXTRA - MUST BE REMOVED]")
-                -- turtle.craft() requires ALL non-recipe slots to be empty
-                -- We'll need to handle this carefully
+                print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count .. " [EXTRA - CLEARING]")
+                -- This slot shouldn't have items for crafting
+                -- Try to consolidate with other slots first
+                local consolidated = false
+                for targetSlot = 1, 16 do
+                    if targetSlot ~= slot and not slots[targetSlot] then
+                        local targetItem = turtle.getItemDetail(targetSlot)
+                        if targetItem and targetItem.name == item.name then
+                            if turtle.transferTo(targetSlot) then
+                                print("  Consolidated with slot " .. targetSlot)
+                                consolidated = true
+                                break
+                            end
+                        elseif not targetItem then
+                            if turtle.transferTo(targetSlot) then
+                                print("  Moved to empty slot " .. targetSlot)
+                                consolidated = true
+                                break
+                            end
+                        end
+                    end
+                end
+                if not consolidated then
+                    -- No space, drop temporarily
+                    print("  No space to consolidate, dropping items")
+                    turtle.drop()
+                end
             end
         end
     end
