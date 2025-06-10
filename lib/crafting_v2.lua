@@ -91,8 +91,42 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
             end
         end
         
-        -- Give time for items to arrive
-        sleep(0.5)
+        -- Wait for items to actually arrive in inventory
+        print("Waiting for " .. count .. "x " .. itemName .. " to arrive...")
+        local waitStart = os.clock()
+        local itemsArrived = false
+        
+        while os.clock() - waitStart < 5 do  -- Wait up to 5 seconds
+            -- Count how many of this item we have
+            local totalCount = 0
+            for slot = 1, 16 do
+                local item = turtle.getItemDetail(slot)
+                if item and item.name == itemName then
+                    totalCount = totalCount + item.count
+                end
+            end
+            
+            if totalCount >= count then
+                print("  Items arrived! Total: " .. totalCount)
+                itemsArrived = true
+                break
+            end
+            
+            sleep(0.1)
+        end
+        
+        if not itemsArrived then
+            print("  WARNING: Items did not arrive in time!")
+        end
+    end
+    
+    -- Show what we received and where
+    print("\nFinal inventory after all requests:")
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item then
+            print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
+        end
     end
     
     return received
@@ -109,31 +143,53 @@ function crafting_v2.arrangeCraftingGrid(recipe)
         print("  Slot " .. slot .. ": " .. item)
     end
     
-    -- First, move everything to storage area (slots 12-16)
-    for slot = 1, 11 do
-        turtle.select(slot)
-        if turtle.getItemCount() > 0 then
-            for storage = 12, 16 do
-                if turtle.transferTo(storage) then
-                    break
-                end
+    -- Show current inventory state
+    print("\nCurrent inventory before arrangement:")
+    local hasRequiredItems = true
+    for _, itemName in pairs(recipe.ingredients) do
+        local totalCount = 0
+        for slot = 1, 16 do
+            local item = turtle.getItemDetail(slot)
+            if item and item.name == itemName then
+                totalCount = totalCount + item.count
+                print("  Slot " .. slot .. ": " .. item.count .. "x " .. item.name)
             end
+        end
+        if totalCount == 0 then
+            print("  ERROR: Missing " .. itemName)
+            hasRequiredItems = false
         end
     end
     
-    -- Now place items according to pattern
+    if not hasRequiredItems then
+        return false, "Missing required items for recipe"
+    end
+    
+    -- Now arrange items for crafting
+    -- For each required slot, find the item and place EXACTLY the amount needed
     for targetSlot, itemName in pairs(slots) do
+        print("Need to place " .. itemName .. " in slot " .. targetSlot)
         local placed = false
         
-        -- Find the item in inventory
+        -- Find the item in any slot
         for searchSlot = 1, 16 do
             turtle.select(searchSlot)
             local item = turtle.getItemDetail()
             if item and item.name == itemName then
-                -- Transfer one to the target slot
-                if turtle.transferTo(targetSlot, 1) then
+                print("  Found " .. item.name .. " in slot " .. searchSlot)
+                -- Move exactly 1 item to the target slot
+                if searchSlot ~= targetSlot then
+                    if turtle.transferTo(targetSlot, 1) then
+                        placed = true
+                        print("  Transferred 1 item to slot " .. targetSlot)
+                        break
+                    else
+                        print("  Failed to transfer!")
+                    end
+                else
+                    -- Already in the right slot
                     placed = true
-                    print("Placed " .. itemName .. " in slot " .. targetSlot)
+                    print("  Already in correct slot")
                     break
                 end
             end
@@ -144,18 +200,34 @@ function crafting_v2.arrangeCraftingGrid(recipe)
         end
     end
     
-    -- Show final grid state
-    print("Final crafting grid:")
-    for slot = 1, 11 do
-        if slot == 4 or slot == 8 then
-            -- Skip slots 4 and 8 (not part of crafting grid)
-        else
-            turtle.select(slot)
-            local count = turtle.getItemCount()
-            if count > 0 then
-                local item = turtle.getItemDetail()
-                print("  Slot " .. slot .. ": " .. (item and item.name or "unknown") .. " x" .. count)
+    -- Verify the setup and ensure only recipe slots have items
+    print("Verifying crafting setup...")
+    for slot = 1, 16 do
+        turtle.select(slot)
+        local count = turtle.getItemCount()
+        if count > 0 then
+            local item = turtle.getItemDetail()
+            if slots[slot] then
+                print("  Slot " .. slot .. ": " .. item.name .. " x" .. count .. " [RECIPE]")
+                -- Make sure we have exactly 1 item in recipe slots
+                if count > 1 then
+                    print("  WARNING: Slot " .. slot .. " has " .. count .. " items, dropping extras")
+                    turtle.drop(count - 1)
+                end
+            else
+                print("  Slot " .. slot .. ": " .. item.name .. " x" .. count .. " [EXTRA - MUST BE REMOVED]")
+                -- turtle.craft() requires ALL non-recipe slots to be empty
+                -- We'll need to handle this carefully
             end
+        end
+    end
+    
+    -- Final state check
+    print("Final crafting grid:")
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item then
+            print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
         end
     end
     
@@ -176,10 +248,31 @@ function crafting_v2.craft(recipe, quantity)
             return crafted, err
         end
         
-        -- Select slot 1 and craft
-        turtle.select(1)
-        print("Attempting to craft...")
-        if turtle.craft() then
+        -- Get the slots mapping for this recipe
+        local recipes = dofile("recipes.lua")
+        local slots = recipes.patternToSlots(recipe.pattern, recipe.ingredients)
+        
+        -- Find an empty slot for the craft result or select a slot with ingredients
+        -- The crafted items will replace ingredients in the selected slot
+        local craftSlot = nil
+        for slot = 1, 16 do
+            if slots[slot] then
+                craftSlot = slot
+                break
+            end
+        end
+        
+        if not craftSlot then
+            -- No recipe slots? Use slot 1
+            craftSlot = 1
+        end
+        
+        turtle.select(craftSlot)
+        print("Attempting to craft with slot " .. craftSlot .. " selected...")
+        
+        -- Call turtle.craft()
+        local ok, err = turtle.craft()
+        if ok then
             crafted = crafted + recipe.count
             print("Batch " .. batch .. " complete (" .. recipe.count .. " items)")
             
@@ -192,14 +285,15 @@ function crafting_v2.craft(recipe, quantity)
                 end
             end
         else
-            print("Craft failed! Current inventory:")
+            print("Craft failed! Error: " .. tostring(err))
+            print("Current inventory:")
             for slot = 1, 16 do
                 local item = turtle.getItemDetail(slot)
                 if item then
                     print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
                 end
             end
-            return crafted, "Crafting failed at batch " .. batch
+            return crafted, "Crafting failed at batch " .. batch .. ": " .. tostring(err)
         end
     end
     
