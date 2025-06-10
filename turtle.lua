@@ -139,6 +139,10 @@ local function handleMessage(sender, message)
         discoveryMode = true
         expectedPeripheral = message.data.peripheralName
         print("\n[Turtle] Entering discovery mode for " .. expectedPeripheral)
+        
+    elseif message.type == "DISCOVERY_ACTION" and sender == jobsComputerID then
+        -- Legacy discovery action support
+        print("\n[Turtle] Discovery action not implemented")
     end
 end
 
@@ -163,9 +167,10 @@ local function checkDiscoveryItem()
             discoveryMode = false
             expectedPeripheral = nil
             
-            -- Drop the item back (optional - could keep it)
+            -- Drop the item back down for Jobs Computer to collect
             turtle.select(slot)
             turtle.dropDown()
+            print("[Turtle] Dropped discovery item for return")
             
             return true
         end
@@ -362,7 +367,7 @@ local function main()
         end
         
         -- Check for discovery items
-        if discoveryMode and os.clock() - lastDiscoveryCheck > 0.5 then
+        if discoveryMode and os.clock() - lastDiscoveryCheck > 0.2 then
             checkDiscoveryItem()
             lastDiscoveryCheck = os.clock()
         end

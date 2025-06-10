@@ -23,9 +23,6 @@ local FILES = {
     
     -- Optional utilities
     {url = "startup.lua", path = "startup.lua"},
-    {url = "test_network.lua", path = "test_network.lua"},
-    {url = "test_me_bridge.lua", path = "test_me_bridge.lua"},
-    {url = "test_wired_discovery.lua", path = "test_wired_discovery.lua"},
     
     -- Documentation files (optional - comment out if not needed)
     -- {url = "README.md", path = "README.md"},

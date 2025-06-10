@@ -198,8 +198,13 @@ local function handleMessage(sender, message)
         
         local itemName = message.data.item
         local count = message.data.count or 64
+        local isDiscoveryItem = message.data.isDiscoveryItem
         
-        print("\n[Jobs] Turtle #" .. sender .. " depositing " .. count .. "x " .. itemName)
+        if isDiscoveryItem then
+            print("\n[Jobs] Returning discovery item from Turtle #" .. sender)
+        else
+            print("\n[Jobs] Turtle #" .. sender .. " depositing " .. count .. "x " .. itemName)
+        end
         
         -- Import items from turtle to ME (assuming turtle is adjacent)
         local imported, err = me_bridge.importItem(itemName, count, "up")
@@ -209,7 +214,11 @@ local function handleMessage(sender, message)
                 item = itemName,
                 count = imported
             })
-            print("[Jobs] Imported " .. imported .. "x " .. itemName .. " from turtle")
+            if isDiscoveryItem then
+                print("[Jobs] Discovery item returned to ME system")
+            else
+                print("[Jobs] Imported " .. imported .. "x " .. itemName .. " from turtle")
+            end
         else
             network.send(sender, "DEPOSIT_RESPONSE", {
                 success = false,
@@ -439,8 +448,11 @@ local function discoverWiredTurtles()
     end
     
     print("\nStarting discovery process...")
-    print("Sending discovery items to each turtle...")
+    print("Using item transfer method...")
     print()
+    
+    -- Clear previous mappings
+    wiredTurtles = {}
     
     -- For each turtle peripheral
     for _, peripheralName in ipairs(turtlePeripherals) do
@@ -449,80 +461,134 @@ local function discoverWiredTurtles()
         -- Wrap the turtle
         local turtle = peripheral.wrap(peripheralName)
         if turtle then
-            -- Send discovery notification to all registered turtles
-            for _, turtleData in ipairs(turtles) do
-                if turtleData.status == "online" then
-                    network.send(turtleData.id, "DISCOVERY_START", {
-                        peripheralName = peripheralName
-                    })
-                end
-            end
-            
-            -- Wait a moment for turtles to prepare
-            sleep(0.5)
-            
-            -- Try to drop an item into the turtle's inventory
-            -- First, check if turtle has space
+            -- Check if turtle has space
             local hasSpace = false
+            local emptySlot = nil
             for slot = 1, 16 do
                 if turtle.getItemCount(slot) == 0 then
                     hasSpace = true
+                    emptySlot = slot
                     break
                 end
             end
             
             if hasSpace then
-                -- Try to push a single cobblestone (or any item) as a marker
-                -- This assumes Jobs Computer has items in its own inventory
-                -- or can get them from ME system
+                -- Send discovery notification to all registered turtles
+                for _, turtleData in ipairs(turtles) do
+                    if turtleData.status == "online" then
+                        network.send(turtleData.id, "DISCOVERY_START", {
+                            peripheralName = peripheralName
+                        })
+                    end
+                end
+                
+                -- Wait a moment for turtles to prepare
+                sleep(0.5)
+                
                 local success = false
                 
-                -- Jobs Computer needs to have a chest or inventory peripheral
-                -- Try to find a chest to pull items from
-                local chest = peripheral.find("minecraft:chest") or peripheral.find("inventory")
-                if chest then
-                    -- Pull one item from chest to turtle
-                    for slot = 1, chest.size() do
-                        local item = chest.getItemDetail(slot)
-                        if item and item.count > 0 then
-                            -- Use turtle peripheral to pull from chest
-                            success = turtle.pullItems(peripheral.getName(chest), slot, 1)
-                            if success then
-                                print("  Sent discovery item to " .. peripheralName)
+                -- Try to export an item from ME system
+                if me_bridge.isConnected() then
+                    -- Export one cobblestone (or any common item) to the turtle
+                    -- First check what items are available
+                    local testItem = "minecraft:cobblestone"
+                    local available = me_bridge.getItem(testItem)
+                    
+                    if not available or available.amount == 0 then
+                        -- Try to find any available item
+                        local items = me_bridge.listItems()
+                        if items and #items > 0 then
+                            testItem = items[1].name
+                        end
+                    end
+                    
+                    -- Export to the turtle's direction (assuming turtles are around the ME Bridge)
+                    local directions = {"up", "down", "north", "south", "east", "west"}
+                    for _, dir in ipairs(directions) do
+                        local exported = me_bridge.exportItem(testItem, 1, dir)
+                        if exported and exported > 0 then
+                            -- Check if this turtle got the item
+                            sleep(0.5)
+                            local newCount = turtle.getItemCount(emptySlot)
+                            if newCount > 0 then
+                                print("  Sent discovery item (" .. testItem .. ") to " .. peripheralName)
+                                success = true
+                                
+                                -- Wait for turtle to report back
+                                local timeout = os.startTimer(3)
+                                local identified = false
+                                
+                                while not identified do
+                                    local event, p1, p2, p3 = os.pullEvent()
+                                    if event == "rednet_message" then
+                                        local sender, message, protocol = p1, p2, p3
+                                        if message and message.type == "DISCOVERY_RESPONSE" and 
+                                           message.data.peripheralName == peripheralName then
+                                            os.cancelTimer(timeout)
+                                            print("  [OK] Turtle #" .. sender .. " identified as " .. peripheralName)
+                                            
+                                            -- Update mapping
+                                            wiredTurtles[peripheralName] = sender
+                                            
+                                            -- Update turtle record
+                                            for i, t in ipairs(turtles) do
+                                                if t.id == sender then
+                                                    t.peripheralName = peripheralName
+                                                    break
+                                                end
+                                            end
+                                            
+                                            identified = true
+                                        end
+                                    elseif event == "timer" and p1 == timeout then
+                                        print("  [X] Timeout waiting for response")
+                                        break
+                                    end
+                                end
+                                
+                                -- Import the item back to ME
+                                sleep(0.5)
+                                local imported = me_bridge.importItem(testItem, 1, dir)
+                                if imported and imported > 0 then
+                                    print("  Returned discovery item to ME system")
+                                end
+                                
                                 break
+                            else
+                                -- Import it back since this turtle didn't get it
+                                me_bridge.importItem(testItem, 1, dir)
                             end
                         end
                     end
-                end
-                
-                if not success and me_bridge.isConnected() then
-                    -- Try to export directly from ME to turtle
-                    -- This requires the turtle to be adjacent to the ME Bridge
-                    print("  Trying ME system export...")
-                    local exported = me_bridge.exportItem("minecraft:cobblestone", 1, peripheralName)
-                    if exported and exported > 0 then
-                        print("  Sent ME item to " .. peripheralName)
-                        success = true
-                    end
+                else
+                    print("  [!] ME Bridge not connected - cannot send discovery items")
                 end
                 
                 if not success then
-                    print("  WARNING: Could not send item to " .. peripheralName)
-                    print("  Make sure Jobs Computer has items to send")
+                    print("  [X] Could not send item to " .. peripheralName)
                 end
             else
-                print("  WARNING: Turtle " .. peripheralName .. " inventory is full")
+                print("  [!] Turtle " .. peripheralName .. " inventory is full")
             end
-            
-            -- Wait for response
-            sleep(1)
+        else
+            print("  [X] Failed to wrap peripheral")
         end
     end
     
     print("\nDiscovery complete!")
     print("\nMapped turtles:")
+    local mappedCount = 0
     for peripheral, turtleId in pairs(wiredTurtles) do
         print("  " .. peripheral .. " -> Turtle #" .. turtleId)
+        mappedCount = mappedCount + 1
+    end
+    
+    if mappedCount == 0 then
+        print("  No turtles were mapped.")
+        print("  Make sure:")
+        print("  - Turtles are running and registered")
+        print("  - ME Bridge is connected with items")
+        print("  - Wired modems are activated")
     end
     
     print("\nPress any key to continue...")
