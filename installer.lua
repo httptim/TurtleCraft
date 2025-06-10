@@ -14,9 +14,7 @@ local FILES = {
     
     -- Library files
     {url = "lib/network.lua", path = "lib/network.lua"},
-    {url = "lib/logger.lua", path = "lib/logger.lua"},
     {url = "lib/me_bridge.lua", path = "lib/me_bridge.lua"},
-    {url = "lib/utils.lua", path = "lib/utils.lua"},
     
     -- Main programs
     {url = "main_computer.lua", path = "main_computer.lua"},
@@ -27,6 +25,10 @@ local FILES = {
     {url = "startup.lua", path = "startup.lua"},
     {url = "test_network.lua", path = "test_network.lua"},
     {url = "test_me_bridge.lua", path = "test_me_bridge.lua"},
+    
+    -- Documentation files (optional - comment out if not needed)
+    -- {url = "README.md", path = "README.md"},
+    -- {url = "docs/progress-report.md", path = "docs/progress-report.md"},
 }
 
 -- Directories to create  

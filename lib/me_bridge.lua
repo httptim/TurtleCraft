@@ -2,7 +2,6 @@
 -- Provides interface to Applied Energistics 2 ME System via Advanced Peripherals
 
 local config = dofile("config.lua")
-local logger = dofile("lib/logger.lua")
 
 local me_bridge = {}
 
@@ -24,7 +23,7 @@ function me_bridge.init()
             if config.DEBUG then
                 print("[ME Bridge] Connected to configured bridge: " .. config.ME_BRIDGE_NAME)
             end
-            logger.info("ME Bridge connected: " .. config.ME_BRIDGE_NAME)
+            -- ME Bridge connected
             return true
         end
     end
@@ -37,14 +36,14 @@ function me_bridge.init()
         if config.DEBUG then
             print("[ME Bridge] Found ME Bridge: " .. bridgeName)
         end
-        logger.info("ME Bridge connected: " .. bridgeName)
+        -- ME Bridge connected
         return true
     end
     
     if config.DEBUG then
         print("[ME Bridge] No ME Bridge found!")
     end
-    logger.error("Failed to find ME Bridge")
+    -- Failed to find ME Bridge
     return false
 end
 
@@ -66,7 +65,7 @@ function me_bridge.listItems()
     
     local ok, result = pcall(bridge.listItems)
     if not ok then
-        logger.error("Failed to list items: " .. tostring(result))
+        -- Failed to list items
         return nil, tostring(result)
     end
     
@@ -81,7 +80,7 @@ function me_bridge.getItem(itemName)
     
     local ok, result = pcall(bridge.getItem, {name = itemName})
     if not ok then
-        logger.error("Failed to get item: " .. tostring(result))
+        -- Failed to get item
         return nil, tostring(result)
     end
     
@@ -124,14 +123,14 @@ function me_bridge.exportItem(itemName, count, direction)
     local item = {name = itemName}
     local ok, result = pcall(bridge.exportItem, item, direction, count)
     if not ok then
-        logger.error("Failed to export item: " .. tostring(result))
+        -- Failed to export item
         return nil, tostring(result)
     end
     
     if config.DEBUG then
         print("[ME Bridge] Exported " .. tostring(result) .. "x " .. itemName .. " to " .. direction)
     end
-    logger.info("Exported " .. tostring(result) .. "x " .. itemName)
+    -- Exported items
     
     return result
 end
@@ -147,14 +146,14 @@ function me_bridge.importItem(itemName, count, direction)
     local item = {name = itemName}
     local ok, result = pcall(bridge.importItem, item, direction, count)
     if not ok then
-        logger.error("Failed to import item: " .. tostring(result))
+        -- Failed to import item
         return nil, tostring(result)
     end
     
     if config.DEBUG then
         print("[ME Bridge] Imported " .. tostring(result) .. "x " .. itemName .. " from " .. direction)
     end
-    logger.info("Imported " .. tostring(result) .. "x " .. itemName)
+    -- Imported items
     
     return result
 end
@@ -178,7 +177,7 @@ function me_bridge.exportItemToSlot(itemName, count, direction, slot)
     end)
     
     if not ok then
-        logger.error("Failed to export to slot: " .. tostring(result))
+        -- Failed to export to slot
         return nil, tostring(result)
     end
     
@@ -194,7 +193,7 @@ function me_bridge.isItemCraftable(itemName)
     local item = {name = itemName}
     local ok, result = pcall(bridge.isItemCraftable, item)
     if not ok then
-        logger.error("Failed to check craftable: " .. tostring(result))
+        -- Failed to check craftable
         return false, tostring(result)
     end
     
@@ -209,7 +208,7 @@ function me_bridge.listCraftableItems()
     
     local ok, result = pcall(bridge.listCraftableItems)
     if not ok then
-        logger.error("Failed to list craftable items: " .. tostring(result))
+        -- Failed to list craftable items
         return nil, tostring(result)
     end
     
@@ -225,14 +224,14 @@ function me_bridge.craftItem(itemName, count)
     local item = {name = itemName}
     local ok, result = pcall(bridge.craftItem, item, count)
     if not ok then
-        logger.error("Failed to craft item: " .. tostring(result))
+        -- Failed to craft item
         return nil, tostring(result)
     end
     
     if config.DEBUG then
         print("[ME Bridge] Started crafting " .. count .. "x " .. itemName)
     end
-    logger.info("Crafting " .. count .. "x " .. itemName)
+    -- Crafting items
     
     return result
 end
@@ -313,7 +312,7 @@ function me_bridge.getCraftingCPUs()
     
     local ok, result = pcall(bridge.getCraftingCPUs)
     if not ok then
-        logger.error("Failed to get crafting CPUs: " .. tostring(result))
+        -- Failed to get crafting CPUs
         return nil, tostring(result)
     end
     
@@ -334,7 +333,7 @@ end
 function me_bridge.disconnect()
     connected = false
     bridge = nil
-    logger.info("ME Bridge disconnected")
+    -- ME Bridge disconnected
 end
 
 return me_bridge
