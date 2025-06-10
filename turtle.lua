@@ -41,6 +41,7 @@ local function displayStatus()
     print("  F - Refuel from slot 16")
     print("  G - Get items from ME system")
     print("  D - Deposit items to ME system")
+    print("  C - Craft items")
     print("  Q - Quit")
 end
 
@@ -126,11 +127,36 @@ local function handleMessage(sender, message)
         
     elseif message.type == "JOB_ASSIGN" and sender == jobsComputerID then
         print("\n[Turtle] Received job assignment!")
-        -- Job handling will be implemented in later phases
-        network.send(jobsComputerID, "JOB_ACK", {
-            accepted = false,
-            reason = "Not implemented yet"
-        })
+        local job = message.data
+        
+        if job.type == "CRAFT" then
+            -- Accept the job
+            network.send(jobsComputerID, "JOB_ACK", {
+                accepted = true,
+                jobId = job.id
+            })
+            
+            -- Perform the crafting
+            local crafting = dofile("lib/crafting.lua")
+            local success, crafted, deposited = crafting.performCraft(
+                turtle, network, jobsComputerID,
+                job.recipe, job.quantity
+            )
+            
+            -- Report completion
+            network.send(jobsComputerID, "JOB_COMPLETE", {
+                jobId = job.id,
+                success = success,
+                crafted = crafted or 0,
+                deposited = deposited or {},
+                error = not success and crafted or nil
+            })
+        else
+            network.send(jobsComputerID, "JOB_ACK", {
+                accepted = false,
+                reason = "Unknown job type: " .. (job.type or "nil")
+            })
+        end
         
     elseif message.type == "DISCOVERY_START" and sender == jobsComputerID then
         -- Legacy discovery message - no longer needed
@@ -192,8 +218,72 @@ local function requestItems()
         end
     end
     
-    print("\nPress any key to continue...")
-    os.pullEvent("key")
+    sleep(2)
+end
+
+-- Craft items
+local function craftItems()
+    if not registered or not jobsComputerID then
+        print("\n[Turtle] Not registered with Jobs Computer!")
+        sleep(2)
+        return
+    end
+    
+    clear()
+    print("Craft Items")
+    print("===========")
+    print()
+    
+    -- Show available recipes
+    local recipes = dofile("recipes.lua")
+    print("Available recipes:")
+    local recipeList = {}
+    local index = 1
+    for name, recipe in pairs(recipes) do
+        if type(recipe) == "table" and recipe.result then
+            recipeList[index] = name
+            print(index .. ". " .. name .. " (x" .. recipe.count .. ")")
+            index = index + 1
+        end
+    end
+    
+    print()
+    print("Enter recipe number (or 0 to cancel):")
+    write("> ")
+    local choice = tonumber(read())
+    
+    if not choice or choice == 0 or choice >= index then
+        return
+    end
+    
+    local recipeName = recipeList[choice]
+    local recipe = recipes.get(recipeName)
+    
+    print()
+    print("How many to craft? (Recipe makes " .. recipe.count .. " per batch)")
+    write("> ")
+    local quantity = tonumber(read()) or recipe.count
+    
+    print("\n[Turtle] Requesting craft job...")
+    
+    -- For now, just do local crafting
+    local crafting = dofile("lib/crafting.lua")
+    local success, crafted, deposited = crafting.performCraft(
+        turtle, network, jobsComputerID,
+        recipeName, quantity
+    )
+    
+    if success then
+        print("\n[Turtle] Successfully crafted " .. crafted .. " items!")
+        print("Deposited:")
+        for item, count in pairs(deposited) do
+            print("  " .. item .. " x" .. count)
+        end
+    else
+        print("\n[Turtle] Crafting failed: " .. (crafted or "Unknown error"))
+    end
+    
+    sleep(2)
 end
 
 -- Deposit items to ME system
@@ -275,8 +365,7 @@ local function depositItems()
         print("[Turtle] Failed to drop items!")
     end
     
-    print("\nPress any key to continue...")
-    os.pullEvent("key")
+    sleep(2)
 end
 
 -- Main function
@@ -355,6 +444,8 @@ local function main()
                 requestItems()
             elseif p1 == keys.d then
                 depositItems()
+            elseif p1 == keys.c then
+                craftItems()
             end
         elseif event == "timer" and p1 == timer then
             -- Timer expired, continue loop

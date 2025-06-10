@@ -40,6 +40,15 @@ end
 - Graceful shutdown with UNREGISTER message
 - Main Computer shows active/total turtle count
 
+### 4. Wired Turtle Discovery
+**Problem**: Wired modem turtle peripherals have generic names (turtle_0, turtle_1) that don't match their computer IDs.
+
+**Solution**:
+- Direct discovery using `turtle.getID()` peripheral method
+- Automatic discovery when turtles register
+- Manual discovery with 'D' key on Jobs Computer
+- Maps peripheral names to turtle IDs for direct control
+
 ## What Works Now
 
 ### ✅ Core Networking
@@ -53,6 +62,8 @@ end
 - Tracks registered turtles with heartbeats
 - Automatically removes offline turtles
 - Shows turtle status (online/offline with time)
+- Wired turtle discovery (D key or automatic)
+- Shows peripheral names for wired turtles
 - Responds to status requests
 - ME Bridge integration (when available)
 - Interactive ME commands (I - show items, S - search)
@@ -76,10 +87,9 @@ end
 - Deposit items to ME system (D key)
 
 ### ✅ Installation & Setup
-- Updated installer with correct file list (9 files)
+- Updated installer with correct file list (7 files)
 - Startup menu for easy program selection
-- Network test tool included
-- ME Bridge test tool included
+- All test files removed for cleaner installation
 - Clear setup instructions
 
 ## Current Limitations
@@ -107,29 +117,37 @@ end
 - Storage and energy status
 - Interactive testing tools
 
+### ✅ Phase 3: Recipe System & Basic Crafting
+- Recipe definitions for basic items (planks, sticks, chests, etc.)
+- Crafting library with inventory management
+- Turtle-side crafting execution
+- Job assignment from Main Computer to turtles
+- Automatic item request and deposit during crafting
+- Interactive crafting menu on turtle (C key)
+
 ## Next Steps (Recommended Order)
 
-### Phase 3: Recipe System & Dependency Resolution
-1. Create `recipes.lua` with recipe definitions
-2. Create `lib/crafting.lua` for crafting logic
-3. Create `lib/dependency.lua` for dependency resolution
-4. Add recipe validation and pattern matching
-5. Implement turtle-side crafting execution
+### Phase 4: Advanced Recipe System & Dependency Resolution
+1. Create `lib/dependency.lua` for dependency resolution
+2. Add recursive crafting (craft ingredients if not available)
+3. Add recipe validation and alternative recipes
+4. Implement resource checking before job assignment
+5. Add crafting queue with multiple recipes
 
-### Phase 4: Job Queue & Distribution System
+### Phase 5: Job Queue & Distribution System
 1. Create `lib/job_manager.lua` for job queue management
 2. Add priority queue implementation
 3. Implement job assignment to turtles
 4. Add job status tracking and completion handling
 5. Create load balancing system
 
-### Phase 5: Basic Text Interfaces
+### Phase 6: Advanced Text Interfaces
 1. Add crafting commands to Main Computer
 2. Create job queue display
 3. Add recipe search functionality
 4. Implement job status monitoring
 
-### Phase 6: Persistence & Advanced Features
+### Phase 7: Persistence & Advanced Features
 1. Save/restore turtle registry
 2. Persist job queue state
 3. Add configuration hot-reload
@@ -141,15 +159,15 @@ end
 ```
 /
 ├── config.lua           # Configuration (protocol, timeouts, ME Bridge)
+├── recipes.lua          # Recipe definitions
 ├── lib/
 │   ├── network.lua      # Network library (rednet wrapper)
-│   └── me_bridge.lua    # ME Bridge interface library
-├── jobs_computer.lua    # Central manager with ME integration
-├── main_computer.lua    # User interface with ME status
-├── turtle.lua           # Turtle client with item transfer
-├── startup.lua          # Menu selector
-├── test_network.lua     # Network diagnostic tool
-└── test_me_bridge.lua   # ME Bridge testing tool
+│   ├── me_bridge.lua    # ME Bridge interface library
+│   └── crafting.lua     # Crafting operations library
+├── jobs_computer.lua    # Central manager with job assignment
+├── main_computer.lua    # User interface with crafting requests
+├── turtle.lua           # Turtle client with crafting execution
+└── startup.lua          # Menu selector
 ```
 
 ### Network Protocol
@@ -158,6 +176,9 @@ end
 - Message format: `{type, data, sender, time}`
 - Core messages: PING/PONG, REGISTER, HEARTBEAT, STATUS_REQUEST, UNREGISTER
 - ME messages: REQUEST_ITEMS, ITEMS_RESPONSE, DEPOSIT_ITEMS, DEPOSIT_RESPONSE, CHECK_STOCK, STOCK_RESPONSE
+- Job messages: JOB_ASSIGN, JOB_ACK, JOB_COMPLETE
+- Craft messages: CRAFT_REQUEST, CRAFT_RESPONSE
+- Discovery messages: DISCOVERY_START (legacy), DISCOVERY_RESPONSE (legacy)
 
 ### Configuration Options
 ```lua
@@ -172,9 +193,9 @@ DEBUG = true                      -- Show network messages
 
 ## Current Status
 
-**Phase 1 & 2 Complete**: The system has a solid networking foundation and full ME Bridge integration. All components can communicate reliably, turtles can request and deposit items, and the Jobs Computer provides good visibility into the ME system status.
+**Phase 1, 2 & 3 Complete**: The system has solid networking, ME Bridge integration, and basic crafting functionality. Turtles can craft items on demand, automatically requesting materials from the ME system and depositing results back.
 
-**Ready for Phase 3**: The next step is to implement the recipe system and dependency resolution, which will enable actual crafting operations. This will involve defining recipe formats, creating crafting logic, and implementing dependency checking.
+**Ready for Phase 4**: The next step is to implement advanced recipe features like dependency resolution, which will enable recursive crafting (automatically crafting ingredients when needed) and more complex crafting chains.
 
 ## Key Insights
 
@@ -185,7 +206,11 @@ DEBUG = true                      -- Show network messages
 
 ## Testing the Current System
 
-1. **Network Test**: Run `test_network` on any computer to verify connectivity
-2. **ME Bridge Test**: Run `test_me_bridge` on Jobs Computer to test ME integration
-3. **Item Transfer**: Use G/D keys on turtle to test item requests/deposits
+1. **Wired Discovery**: Connect turtles via wired modems, press D on Jobs Computer
+2. **Item Transfer**: Use G/D keys on turtle to test item requests/deposits  
+3. **Crafting**:
+   - Press C on Main Computer to request crafting jobs
+   - Press C on Turtle to craft items directly
+   - Jobs Computer automatically assigns craft jobs to available turtles
 4. **Status Monitoring**: All computers show real-time status updates
+5. **Auto-discovery**: New turtles are discovered automatically when they register

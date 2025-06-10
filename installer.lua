@@ -15,6 +15,10 @@ local FILES = {
     -- Library files
     {url = "lib/network.lua", path = "lib/network.lua"},
     {url = "lib/me_bridge.lua", path = "lib/me_bridge.lua"},
+    {url = "lib/crafting.lua", path = "lib/crafting.lua"},
+    
+    -- Data files
+    {url = "recipes.lua", path = "recipes.lua"},
     
     -- Main programs
     {url = "main_computer.lua", path = "main_computer.lua"},

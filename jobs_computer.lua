@@ -236,6 +236,30 @@ local function handleMessage(sender, message)
             print("[Jobs] Failed to import: " .. tostring(err))
         end
         
+    elseif message.type == "JOB_ACK" then
+        -- Turtle acknowledged job assignment
+        local jobId = message.data.jobId
+        local accepted = message.data.accepted
+        
+        if accepted then
+            print("\n[Jobs] Turtle #" .. sender .. " accepted job " .. jobId)
+        else
+            print("\n[Jobs] Turtle #" .. sender .. " rejected job: " .. (message.data.reason or "Unknown"))
+        end
+        
+    elseif message.type == "JOB_COMPLETE" then
+        -- Turtle completed a job
+        local jobId = message.data.jobId
+        local success = message.data.success
+        
+        if success then
+            print("\n[Jobs] Turtle #" .. sender .. " completed job " .. jobId)
+            print("[Jobs] Crafted: " .. (message.data.crafted or 0) .. " items")
+        else
+            print("\n[Jobs] Turtle #" .. sender .. " failed job " .. jobId)
+            print("[Jobs] Error: " .. (message.data.error or "Unknown"))
+        end
+        
     elseif message.type == "CHECK_STOCK" then
         -- Check stock level of an item
         if not me_bridge.isConnected() then
@@ -262,6 +286,50 @@ local function handleMessage(sender, message)
                 count = 0
             })
         end
+        
+    elseif message.type == "CRAFT_REQUEST" then
+        -- Main Computer requesting a craft
+        local recipeName = message.data.recipe
+        local quantity = message.data.quantity
+        
+        print("\n[Jobs] Craft request from Main Computer:")
+        print("[Jobs] Recipe: " .. recipeName .. " x" .. quantity)
+        
+        -- Find an available turtle
+        local availableTurtle = nil
+        for _, turtle in ipairs(turtles) do
+            if turtle.status == "online" then
+                availableTurtle = turtle
+                break
+            end
+        end
+        
+        if not availableTurtle then
+            print("[Jobs] No turtles available!")
+            network.send(sender, "CRAFT_RESPONSE", {
+                success = false,
+                error = "No turtles available"
+            })
+            return
+        end
+        
+        -- Send job to turtle
+        local jobId = "job_" .. os.epoch("local")
+        print("[Jobs] Assigning job " .. jobId .. " to Turtle #" .. availableTurtle.id)
+        
+        network.send(availableTurtle.id, "JOB_ASSIGN", {
+            id = jobId,
+            type = "CRAFT",
+            recipe = recipeName,
+            quantity = quantity
+        })
+        
+        -- Send response to Main Computer
+        network.send(sender, "CRAFT_RESPONSE", {
+            success = true,
+            jobId = jobId,
+            turtleId = availableTurtle.id
+        })
         
     elseif message.type == "DISCOVERY_RESPONSE" then
         -- Turtle is reporting it received the discovery item
@@ -509,8 +577,8 @@ local function discoverWiredTurtles()
         print("  - Wired modems are activated (red ring)")
     end
     
-    print("\nPress any key to continue...")
-    os.pullEvent("key")
+    print("\nReturning to main display...")
+    sleep(2)
 end
 
 -- Main function

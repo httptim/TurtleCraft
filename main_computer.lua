@@ -47,6 +47,7 @@ local function displayStatus()
     print("Commands:")
     print("  R - Reconnect to Jobs Computer")
     print("  S - Request Status Update")
+    print("  C - Request Crafting")
     print("  Q - Quit")
 end
 
@@ -100,6 +101,57 @@ local function requestStatus()
     network.send(jobsComputerID, "STATUS_REQUEST", {})
 end
 
+-- Request crafting
+local function requestCrafting()
+    if not connected or not jobsComputerID then
+        print("\n[Main] Not connected to Jobs Computer!")
+        sleep(2)
+        return
+    end
+    
+    clear()
+    print("Request Crafting")
+    print("================")
+    print()
+    
+    -- Simple test: request to craft sticks
+    print("Available test recipes:")
+    print("1. Sticks (4x from 2 planks)")
+    print("2. Planks (4x from 1 log)")
+    print("3. Chest (1x from 8 planks)")
+    print("4. Furnace (1x from 8 cobblestone)")
+    print("0. Cancel")
+    print()
+    write("Choice: ")
+    
+    local choice = tonumber(read())
+    if not choice or choice == 0 then return end
+    
+    local recipes = {
+        {name = "minecraft:stick", count = 4},
+        {name = "minecraft:oak_planks", count = 4},
+        {name = "minecraft:chest", count = 1},
+        {name = "minecraft:furnace", count = 1}
+    }
+    
+    if not recipes[choice] then return end
+    
+    local recipe = recipes[choice]
+    print("\nHow many to craft?")
+    write("> ")
+    local quantity = tonumber(read()) or recipe.count
+    
+    -- For now, just send a test message
+    print("\n[Main] Requesting craft of " .. quantity .. "x " .. recipe.name)
+    network.send(jobsComputerID, "CRAFT_REQUEST", {
+        recipe = recipe.name,
+        quantity = quantity
+    })
+    
+    print("\nRequest sent!")
+    sleep(2)
+end
+
 -- Handle incoming messages
 local function handleMessage(sender, message)
     if not message or not message.type then return end
@@ -113,6 +165,14 @@ local function handleMessage(sender, message)
         systemStatus.jobsRunning = message.data.running or false
         systemStatus.meConnected = message.data.meConnected or false
         systemStatus.meItemCount = message.data.meItemCount or 0
+        
+    elseif message.type == "CRAFT_RESPONSE" and sender == jobsComputerID then
+        if message.data.success then
+            print("\n[Main] Job assigned: " .. message.data.jobId)
+            print("[Main] Turtle #" .. message.data.turtleId .. " is crafting...")
+        else
+            print("\n[Main] Craft request failed: " .. (message.data.error or "Unknown error"))
+        end
     end
 end
 
@@ -181,6 +241,8 @@ local function main()
                 sleep(1)
             elseif p1 == keys.s then
                 requestStatus()
+            elseif p1 == keys.c then
+                requestCrafting()
             end
         elseif event == "timer" and p1 == timer then
             -- Timer expired, continue loop
