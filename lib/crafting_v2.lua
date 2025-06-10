@@ -69,6 +69,8 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
             item = itemName,
             count = count
         })
+        -- Small delay to prevent overwhelming the network
+        sleep(0.1)
     end
     
     -- Wait for all responses
@@ -96,7 +98,8 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
                     print("  Response received for " .. itemName)
                 else
                     os.cancelTimer(responseTimeout)
-                    return nil, "Failed to get items: " .. (message.data.error or "Unknown")
+                    local itemName = message.data.item or "unknown"
+                    return nil, "Failed to get " .. itemName .. ": " .. (message.data.error or "Unknown")
                 end
             end
         end
@@ -135,9 +138,10 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
             break
         end
         
-        -- Show progress every second
-        if math.floor(os.clock() - waitStart) % 1 == 0 then
-            print(status)
+        -- Show progress every second (but only if status changed)
+        local elapsed = math.floor(os.clock() - waitStart)
+        if elapsed ~= math.floor(os.clock() - waitStart - 0.1) then
+            print(status .. " (elapsed: " .. elapsed .. "s)")
         end
         
         sleep(0.1)

@@ -202,7 +202,8 @@ local function handleMessage(sender, message)
         if not turtlePeripheral then
             network.send(sender, "ITEMS_RESPONSE", {
                 success = false,
-                error = "Turtle peripheral not found - run discovery (D)"
+                error = "Turtle peripheral not found - run discovery (D)",
+                item = itemName
             })
             print("[Jobs] Error: Turtle peripheral name not found")
             return
@@ -225,7 +226,8 @@ local function handleMessage(sender, message)
         else
             network.send(sender, "ITEMS_RESPONSE", {
                 success = false,
-                error = err or "Failed to export items"
+                error = err or "Failed to export items",
+                item = itemName
             })
             print("[Jobs] Failed to export: " .. tostring(err))
             print("[Jobs] Item: " .. itemName .. ", Count: " .. count .. ", Peripheral: " .. turtlePeripheral)
