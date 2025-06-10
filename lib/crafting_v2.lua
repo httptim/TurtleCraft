@@ -113,11 +113,12 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
     
     local lastStatus = ""
     while os.clock() - waitStart < maxWaitTime do
-        -- Check current inventory
+        -- Check current inventory by selecting each slot
         local currentInventory = {}
         local debugSlots = "Slot contents: "
         for slot = 1, 16 do
-            local item = turtle.getItemDetail(slot)
+            turtle.select(slot)
+            local item = turtle.getItemDetail()  -- Get details of selected slot
             if item then
                 currentInventory[item.name] = (currentInventory[item.name] or 0) + item.count
                 debugSlots = debugSlots .. "[" .. slot .. ":" .. item.name .. "x" .. item.count .. "] "
@@ -157,7 +158,8 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
     local finalInventory = {}
     print("\nFinal inventory:")
     for slot = 1, 16 do
-        local item = turtle.getItemDetail(slot)
+        turtle.select(slot)
+        local item = turtle.getItemDetail()
         if item then
             print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
             finalInventory[item.name] = (finalInventory[item.name] or 0) + item.count
@@ -192,7 +194,8 @@ function crafting_v2.arrangeCraftingGrid(recipe)
     for _, itemName in pairs(recipe.ingredients) do
         local totalCount = 0
         for slot = 1, 16 do
-            local item = turtle.getItemDetail(slot)
+            turtle.select(slot)
+            local item = turtle.getItemDetail()
             if item and item.name == itemName then
                 totalCount = totalCount + item.count
                 print("  Slot " .. slot .. ": " .. item.count .. "x " .. item.name)
@@ -213,7 +216,8 @@ function crafting_v2.arrangeCraftingGrid(recipe)
     local itemSlots = {}  -- Track which slots contain which items
     
     for slot = 1, 16 do
-        local item = turtle.getItemDetail(slot)
+        turtle.select(slot)
+        local item = turtle.getItemDetail()
         if item then
             if not itemSlots[item.name] then
                 itemSlots[item.name] = {}
@@ -328,7 +332,8 @@ function crafting_v2.arrangeCraftingGrid(recipe)
     -- Final state check
     print("Final crafting grid:")
     for slot = 1, 16 do
-        local item = turtle.getItemDetail(slot)
+        turtle.select(slot)
+        local item = turtle.getItemDetail()
         if item then
             print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
         end
@@ -382,7 +387,8 @@ function crafting_v2.craft(recipe, quantity)
             -- Show what's in inventory after crafting
             print("After crafting:")
             for slot = 1, 16 do
-                local item = turtle.getItemDetail(slot)
+                turtle.select(slot)
+                local item = turtle.getItemDetail()
                 if item then
                     print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
                 end
@@ -391,7 +397,8 @@ function crafting_v2.craft(recipe, quantity)
             print("Craft failed! Error: " .. tostring(err))
             print("Current inventory:")
             for slot = 1, 16 do
-                local item = turtle.getItemDetail(slot)
+                turtle.select(slot)
+                local item = turtle.getItemDetail()
                 if item then
                     print("  Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
                 end
