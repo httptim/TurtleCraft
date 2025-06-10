@@ -9,6 +9,9 @@ local config = {
     -- Uncomment and set this if you want to skip network discovery
     -- JOBS_COMPUTER_ID = 2,  -- The Jobs Computer ID
     
+    -- ME Bridge Settings (optional - will auto-detect if not set)
+    -- ME_BRIDGE_NAME = "meBridge_0",  -- The peripheral name of the ME Bridge
+    
     -- Timeouts
     NETWORK_TIMEOUT = 5,
     HEARTBEAT_INTERVAL = 30,

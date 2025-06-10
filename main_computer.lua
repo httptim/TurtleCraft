@@ -11,7 +11,9 @@ local connected = false
 local systemStatus = {
     turtleCount = 0,
     activeTurtleCount = 0,
-    jobsRunning = false
+    jobsRunning = false,
+    meConnected = false,
+    meItemCount = 0
 }
 
 -- Clear screen helper
@@ -38,6 +40,7 @@ local function displayStatus()
             print("  Turtles: " .. systemStatus.turtleCount)
         end
         print("  Jobs Running: " .. (systemStatus.jobsRunning and "Yes" or "No"))
+        print("  ME System: " .. (systemStatus.meConnected and "Connected (" .. systemStatus.meItemCount .. " items)" or "Not Connected"))
     end
     
     print()
@@ -108,6 +111,8 @@ local function handleMessage(sender, message)
         systemStatus.turtleCount = message.data.turtleCount or 0
         systemStatus.activeTurtleCount = message.data.activeTurtleCount or systemStatus.turtleCount
         systemStatus.jobsRunning = message.data.running or false
+        systemStatus.meConnected = message.data.meConnected or false
+        systemStatus.meItemCount = message.data.meItemCount or 0
     end
 end
 

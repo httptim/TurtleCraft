@@ -39,6 +39,8 @@ local function displayStatus()
     print("Commands:")
     print("  R - Re-register with Jobs Computer")
     print("  F - Refuel from slot 16")
+    print("  G - Get items from ME system")
+    print("  D - Deposit items to ME system")
     print("  Q - Quit")
 end
 
@@ -132,6 +134,146 @@ local function handleMessage(sender, message)
     end
 end
 
+-- Request items from ME system
+local function requestItems()
+    if not registered or not jobsComputerID then
+        print("\n[Turtle] Not registered with Jobs Computer!")
+        sleep(2)
+        return
+    end
+    
+    clear()
+    print("Request Items from ME System")
+    print("============================")
+    print()
+    print("Enter item name (e.g. minecraft:cobblestone):")
+    write("> ")
+    local itemName = read()
+    
+    if itemName == "" then
+        return
+    end
+    
+    print("Enter quantity (default 64):")
+    write("> ")
+    local quantity = read()
+    quantity = tonumber(quantity) or 64
+    
+    print("\n[Turtle] Requesting " .. quantity .. "x " .. itemName .. "...")
+    
+    network.send(jobsComputerID, "REQUEST_ITEMS", {
+        item = itemName,
+        count = quantity
+    })
+    
+    -- Wait for response
+    local timeout = os.startTimer(5)
+    while true do
+        local event, p1, p2, p3 = os.pullEvent()
+        if event == "rednet_message" then
+            local sender, message, protocol = p1, p2, p3
+            if sender == jobsComputerID and message and message.type == "ITEMS_RESPONSE" then
+                os.cancelTimer(timeout)
+                if message.data.success then
+                    print("[Turtle] Received " .. message.data.count .. "x " .. message.data.item)
+                else
+                    print("[Turtle] Failed: " .. (message.data.error or "Unknown error"))
+                end
+                break
+            end
+        elseif event == "timer" and p1 == timeout then
+            print("[Turtle] Request timed out!")
+            break
+        end
+    end
+    
+    print("\nPress any key to continue...")
+    os.pullEvent("key")
+end
+
+-- Deposit items to ME system
+local function depositItems()
+    if not registered or not jobsComputerID then
+        print("\n[Turtle] Not registered with Jobs Computer!")
+        sleep(2)
+        return
+    end
+    
+    clear()
+    print("Deposit Items to ME System")
+    print("==========================")
+    print()
+    print("Current inventory:")
+    
+    -- Show inventory
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item then
+            print(string.format("Slot %2d: %s x%d", slot, item.name, item.count))
+        end
+    end
+    
+    print()
+    print("Enter slot number to deposit (1-16):")
+    write("> ")
+    local slot = tonumber(read())
+    
+    if not slot or slot < 1 or slot > 16 then
+        return
+    end
+    
+    turtle.select(slot)
+    local item = turtle.getItemDetail()
+    if not item then
+        print("\n[Turtle] Slot is empty!")
+        sleep(2)
+        return
+    end
+    
+    print("Deposit all " .. item.count .. " items? (Y/N)")
+    local confirm = read()
+    if string.upper(confirm) ~= "Y" then
+        return
+    end
+    
+    print("\n[Turtle] Depositing " .. item.count .. "x " .. item.name .. "...")
+    
+    -- First drop the items
+    if turtle.dropDown() then
+        -- Then notify Jobs Computer
+        network.send(jobsComputerID, "DEPOSIT_ITEMS", {
+            item = item.name,
+            count = item.count
+        })
+        
+        -- Wait for response
+        local timeout = os.startTimer(5)
+        while true do
+            local event, p1, p2, p3 = os.pullEvent()
+            if event == "rednet_message" then
+                local sender, message, protocol = p1, p2, p3
+                if sender == jobsComputerID and message and message.type == "DEPOSIT_RESPONSE" then
+                    os.cancelTimer(timeout)
+                    if message.data.success then
+                        print("[Turtle] Deposited " .. message.data.count .. "x " .. message.data.item)
+                    else
+                        print("[Turtle] Failed: " .. (message.data.error or "Unknown error"))
+                    end
+                    break
+                end
+            elseif event == "timer" and p1 == timeout then
+                print("[Turtle] Deposit confirmation timed out!")
+                break
+            end
+        end
+    else
+        print("[Turtle] Failed to drop items!")
+    end
+    
+    print("\nPress any key to continue...")
+    os.pullEvent("key")
+end
+
 -- Main function
 local function main()
     clear()
@@ -204,6 +346,10 @@ local function main()
                     print("\n[Turtle] No fuel in slot 16!")
                 end
                 sleep(1)
+            elseif p1 == keys.g then
+                requestItems()
+            elseif p1 == keys.d then
+                depositItems()
             end
         elseif event == "timer" and p1 == timer then
             -- Timer expired, continue loop
