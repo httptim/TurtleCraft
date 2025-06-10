@@ -18,28 +18,28 @@ function utils.drawBox(x, y, width, height, title)
     
     -- Draw corners
     term.setCursorPos(x, y)
-    write("\u{2554}")  -- top left
+    write("+")  -- top left
     term.setCursorPos(x + width - 1, y)
-    write("\u{2557}")  -- top right
+    write("+")  -- top right
     term.setCursorPos(x, y + height - 1)
-    write("\u{255A}")  -- bottom left
+    write("+")  -- bottom left
     term.setCursorPos(x + width - 1, y + height - 1)
-    write("\u{255D}")  -- bottom right
+    write("+")  -- bottom right
     
     -- Draw horizontal lines
     for i = x + 1, x + width - 2 do
         term.setCursorPos(i, y)
-        write("\u{2550}")  -- top
+        write("-")  -- top
         term.setCursorPos(i, y + height - 1)
-        write("\u{2550}")  -- bottom
+        write("-")  -- bottom
     end
     
     -- Draw vertical lines
     for i = y + 1, y + height - 2 do
         term.setCursorPos(x, i)
-        write("\u{2551}")  -- left
+        write("|")  -- left
         term.setCursorPos(x + width - 1, i)
-        write("\u{2551}")  -- right
+        write("|")  -- right
     end
     
     -- Draw title if provided
@@ -144,7 +144,7 @@ function utils.displayPeripheralDetection(detected, computerType)
     if computerType == "turtle" then
         term.setCursorPos(3, y)
         term.setTextColor(colors.lime)
-        print("Turtle Type: Crafty Turtle \u{221A}")
+        print("Turtle Type: Crafty Turtle [OK]")
         term.setTextColor(colors.white)
         y = y + 2
     end
@@ -225,7 +225,7 @@ function utils.displayConfiguration(config, computerType)
     if config.monitor then
         term.setCursorPos(3, y)
         term.setTextColor(colors.green)
-        print("\u{2022} Monitor: " .. config.monitor .. " \u{221A}")
+        print("* Monitor: " .. config.monitor .. " [OK]")
         term.setTextColor(colors.white)
         y = y + 1
     end
@@ -233,7 +233,7 @@ function utils.displayConfiguration(config, computerType)
     if config.wireless_modem then
         term.setCursorPos(3, y)
         term.setTextColor(colors.green)
-        print("\u{2022} Wireless Modem: " .. config.wireless_modem .. " \u{221A}")
+        print("* Wireless Modem: " .. config.wireless_modem .. " [OK]")
         term.setTextColor(colors.white)
         y = y + 1
     end
@@ -241,7 +241,7 @@ function utils.displayConfiguration(config, computerType)
     if config.wired_modem then
         term.setCursorPos(3, y)
         term.setTextColor(colors.green)
-        print("\u{2022} Wired Modem: " .. config.wired_modem .. " \u{221A}")
+        print("* Wired Modem: " .. config.wired_modem .. " [OK]")
         term.setTextColor(colors.white)
         y = y + 1
     end
@@ -249,7 +249,7 @@ function utils.displayConfiguration(config, computerType)
     if config.me_bridge then
         term.setCursorPos(3, y)
         term.setTextColor(colors.green)
-        print("\u{2022} ME Bridge: " .. config.me_bridge .. " \u{221A}")
+        print("* ME Bridge: " .. config.me_bridge .. " [OK]")
         term.setTextColor(colors.white)
         y = y + 1
     end
@@ -257,7 +257,7 @@ function utils.displayConfiguration(config, computerType)
     if computerType == "turtle" then
         term.setCursorPos(3, y)
         term.setTextColor(colors.green)
-        print("\u{2022} Crafting: Built-in \u{221A}")
+        print("* Crafting: Built-in [OK]")
         term.setTextColor(colors.white)
         y = y + 1
     end

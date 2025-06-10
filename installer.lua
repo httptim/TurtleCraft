@@ -293,7 +293,7 @@ local function showProgress(current, total, fileInfo, fileProgress)
     -- Update progress bar line
     local progressBar = makeProgressBar(fileProgress, 20)
     local sizeInfo = string.format("%3d%%", math.floor(fileProgress * 100))
-    local progressMsg = string.format("         └─ %s %s", progressBar, sizeInfo)
+    local progressMsg = string.format("         +-- %s %s", progressBar, sizeInfo)
     addScrollLine(progressMsg, colors.lightGray, "progress_" .. current)
 end
 
@@ -302,11 +302,11 @@ local function completeFileDownload(current, total, fileInfo)
     -- Update file line with checkmark
     local status = string.format("[%3d/%3d]", current, total)
     local fileName = fileInfo.url:match("([^/]+)$") or fileInfo.url
-    local message = string.format("%s ✓ Pulled %s", status, fileName)
+    local message = string.format("%s [OK] Pulled %s", status, fileName)
     addScrollLine(message, colors.lime, "file_" .. current)
     
     -- Update progress bar to complete
-    local progressMsg = string.format("         └─ %s 100%%", makeProgressBar(1, 20))
+    local progressMsg = string.format("         +-- %s 100%%", makeProgressBar(1, 20))
     addScrollLine(progressMsg, colors.lime, "progress_" .. current)
 end
 
@@ -332,7 +332,7 @@ local function downloadFile(fileInfo, index, total)
     
     local response = http.get(url)
     if not response then
-        local errorMsg = string.format("         └─ ✗ Failed to download", colors.red)
+        local errorMsg = string.format("         +-- [X] Failed to download", colors.red)
         addScrollLine(errorMsg, colors.red, "progress_" .. index)
         return false, "Failed to download: " .. fileInfo.url
     end
@@ -342,7 +342,7 @@ local function downloadFile(fileInfo, index, total)
     
     local file = fs.open(fileInfo.path, "w")
     if not file then
-        local errorMsg = string.format("         └─ ✗ Failed to write file", colors.red)
+        local errorMsg = string.format("         +-- [X] Failed to write file", colors.red)
         addScrollLine(errorMsg, colors.red, "progress_" .. index)
         return false, "Failed to write: " .. fileInfo.path
     end
@@ -365,7 +365,7 @@ local function install()
     
     -- Check HTTP
     if not http then
-        addScrollLine("✗ HTTP API is not enabled", colors.red)
+        addScrollLine("[X] HTTP API is not enabled", colors.red)
         sleep(2)
         return false
     end
@@ -380,9 +380,9 @@ local function install()
     for _, dir in ipairs(DIRECTORIES) do
         if not fs.exists(dir) then
             fs.makeDir(dir)
-            addScrollLine("  ✓ Created " .. dir, colors.lime)
+            addScrollLine("  [OK] Created " .. dir, colors.lime)
         else
-            addScrollLine("  • Exists " .. dir, colors.lightGray)
+            addScrollLine("  [--] Exists " .. dir, colors.lightGray)
         end
     end
     
@@ -394,7 +394,7 @@ local function install()
     for i, fileInfo in ipairs(FILES) do
         local success, err = downloadFile(fileInfo, i, total)
         if not success then
-            addScrollLine("✗ Installation failed: " .. err, colors.red)
+            addScrollLine("[X] Installation failed: " .. err, colors.red)
             sleep(3)
             return false
         end
@@ -408,7 +408,7 @@ local function install()
         if file then
             file.write(launcher.content)
             file.close()
-            addScrollLine("  ✓ Created " .. launcher.name, colors.lime)
+            addScrollLine("  [OK] Created " .. launcher.name, colors.lime)
         end
     end
     
