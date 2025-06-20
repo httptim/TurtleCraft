@@ -78,6 +78,84 @@ local function displayStatus()
     print("  Q - Quit")
 end
 
+-- Export items with verification
+local function exportItemWithVerification(itemName, count, turtlePeripheral, turtleId, maxWaitTime)
+    if not me_bridge.isConnected() then
+        return nil, "ME Bridge not connected"
+    end
+    
+    maxWaitTime = maxWaitTime or 10 -- Default 10 seconds
+    
+    print("[Jobs] Verifying export of " .. count .. "x " .. itemName .. " to Turtle #" .. turtleId)
+    
+    -- Get turtle peripheral
+    local turtle = peripheral.wrap(turtlePeripheral)
+    if not turtle then
+        return nil, "Failed to wrap turtle peripheral"
+    end
+    
+    -- Check initial inventory state
+    local initialCount = 0
+    for slot = 1, 16 do
+        local slotInfo = turtle.getItemDetail(slot)
+        if slotInfo and slotInfo.name == itemName then
+            initialCount = initialCount + slotInfo.count
+        end
+    end
+    print("[Jobs] Initial count in turtle: " .. initialCount)
+    
+    -- Export items
+    local exported, err = me_bridge.exportItemToPeripheral(itemName, count, turtlePeripheral)
+    if not exported or exported <= 0 then
+        return nil, err or "Failed to export items"
+    end
+    
+    print("[Jobs] ME Bridge reported export of " .. exported .. " items")
+    print("[Jobs] Waiting for items to arrive in turtle inventory...")
+    
+    -- Poll turtle inventory until items arrive or timeout
+    local startTime = os.clock()
+    local targetCount = initialCount + exported
+    
+    while os.clock() - startTime < maxWaitTime do
+        -- Count items in turtle inventory
+        local currentCount = 0
+        for slot = 1, 16 do
+            local slotInfo = turtle.getItemDetail(slot)
+            if slotInfo and slotInfo.name == itemName then
+                currentCount = currentCount + slotInfo.count
+            end
+        end
+        
+        -- Check if we've received the expected amount
+        if currentCount >= targetCount then
+            local received = currentCount - initialCount
+            print("[Jobs] Verified: " .. received .. " items arrived in turtle inventory")
+            return received
+        end
+        
+        -- Small delay to avoid hammering the peripheral
+        sleep(0.2)
+    end
+    
+    -- Timeout - check final state
+    local finalCount = 0
+    for slot = 1, 16 do
+        local slotInfo = turtle.getItemDetail(slot)
+        if slotInfo and slotInfo.name == itemName then
+            finalCount = finalCount + slotInfo.count
+        end
+    end
+    
+    local received = finalCount - initialCount
+    if received > 0 then
+        print("[Jobs] Warning: Only " .. received .. " of " .. exported .. " items arrived")
+        return received
+    else
+        return nil, "Items never arrived in turtle inventory after " .. maxWaitTime .. " seconds"
+    end
+end
+
 -- Handle incoming messages
 local function handleMessage(sender, message)
     if not message or not message.type then return end
@@ -579,84 +657,6 @@ local function showMEItems()
     
     print("\nPress any key to continue...")
     os.pullEvent("key")
-end
-
--- Export items with verification
-local function exportItemWithVerification(itemName, count, turtlePeripheral, turtleId, maxWaitTime)
-    if not me_bridge.isConnected() then
-        return nil, "ME Bridge not connected"
-    end
-    
-    maxWaitTime = maxWaitTime or 10 -- Default 10 seconds
-    
-    print("[Jobs] Verifying export of " .. count .. "x " .. itemName .. " to Turtle #" .. turtleId)
-    
-    -- Get turtle peripheral
-    local turtle = peripheral.wrap(turtlePeripheral)
-    if not turtle then
-        return nil, "Failed to wrap turtle peripheral"
-    end
-    
-    -- Check initial inventory state
-    local initialCount = 0
-    for slot = 1, 16 do
-        local slotInfo = turtle.getItemDetail(slot)
-        if slotInfo and slotInfo.name == itemName then
-            initialCount = initialCount + slotInfo.count
-        end
-    end
-    print("[Jobs] Initial count in turtle: " .. initialCount)
-    
-    -- Export items
-    local exported, err = me_bridge.exportItemToPeripheral(itemName, count, turtlePeripheral)
-    if not exported or exported <= 0 then
-        return nil, err or "Failed to export items"
-    end
-    
-    print("[Jobs] ME Bridge reported export of " .. exported .. " items")
-    print("[Jobs] Waiting for items to arrive in turtle inventory...")
-    
-    -- Poll turtle inventory until items arrive or timeout
-    local startTime = os.clock()
-    local targetCount = initialCount + exported
-    
-    while os.clock() - startTime < maxWaitTime do
-        -- Count items in turtle inventory
-        local currentCount = 0
-        for slot = 1, 16 do
-            local slotInfo = turtle.getItemDetail(slot)
-            if slotInfo and slotInfo.name == itemName then
-                currentCount = currentCount + slotInfo.count
-            end
-        end
-        
-        -- Check if we've received the expected amount
-        if currentCount >= targetCount then
-            local received = currentCount - initialCount
-            print("[Jobs] Verified: " .. received .. " items arrived in turtle inventory")
-            return received
-        end
-        
-        -- Small delay to avoid hammering the peripheral
-        sleep(0.2)
-    end
-    
-    -- Timeout - check final state
-    local finalCount = 0
-    for slot = 1, 16 do
-        local slotInfo = turtle.getItemDetail(slot)
-        if slotInfo and slotInfo.name == itemName then
-            finalCount = finalCount + slotInfo.count
-        end
-    end
-    
-    local received = finalCount - initialCount
-    if received > 0 then
-        print("[Jobs] Warning: Only " .. received .. " of " .. exported .. " items arrived")
-        return received
-    else
-        return nil, "Items never arrived in turtle inventory after " .. maxWaitTime .. " seconds"
-    end
 end
 
 -- Search for items
