@@ -1,496 +1,256 @@
--- Turtle Client for TurtleCraft
--- Crafting turtle that connects to the Jobs Computer
+-- Simple Crafting Turtle for TurtleCraft
 
-local config = dofile("config.lua")
-local network = dofile("lib/network.lua")
+local PROTOCOL = "turtlecraft"
+local HEARTBEAT_INTERVAL = 5
+local CHEST_DIRECTION = "front"  -- Where to get/put items
 
 -- State
+local jobsComputerId = nil
 local running = true
-local jobsComputerID = nil
-local registered = false
 
--- Clear screen helper
+-- Initialize
+print("Simple Crafting Turtle Starting...")
+print("Turtle ID: " .. os.getComputerID())
+
+-- Open rednet
+peripheral.find("modem", rednet.open)
+
+-- Helper functions
 local function clear()
     term.clear()
     term.setCursorPos(1, 1)
 end
 
--- Check if this is a crafty turtle
-local function isCraftyTurtle()
-    return turtle ~= nil and turtle.craft ~= nil
-end
-
--- Display status
-local function displayStatus()
-    clear()
-    print("TurtleCraft - Turtle Client")
-    print("===========================")
-    print()
-    print("Turtle ID: " .. os.getComputerID())
-    print("Type: " .. (isCraftyTurtle() and "Crafty Turtle" or "Not a crafty turtle!"))
-    print("Jobs Computer: " .. (registered and "REGISTERED (ID: " .. jobsComputerID .. ")" or "NOT REGISTERED"))
-    print()
+-- Find and register with Jobs Computer
+local function findJobsComputer()
+    print("Looking for Jobs Computer...")
     
-    if turtle then
-        print("Fuel Level: " .. turtle.getFuelLevel())
-    end
-    
-    print()
-    print("Commands:")
-    print("  R - Re-register with Jobs Computer")
-    print("  F - Refuel from slot 16")
-    print("  G - Get items from ME system")
-    print("  D - Deposit items to ME system")
-    print("  C - Craft items")
-    print("  Q - Quit")
-end
-
--- Register with Jobs Computer
-local function registerWithJobsComputer()
-    print("\n[Turtle] Searching for Jobs Computer...")
-    
-    -- First try the configured ID
-    if config.JOBS_COMPUTER_ID then
-        print("[Turtle] Trying configured ID: " .. config.JOBS_COMPUTER_ID)
-        
-        network.send(config.JOBS_COMPUTER_ID, "REGISTER", {
-            turtleType = "crafty",
-            fuelLevel = turtle and turtle.getFuelLevel() or 0
-        })
-        
-        -- Wait for response
-        local startTime = os.clock()
-        while os.clock() - startTime < 3 do
-            local sender, message = network.receive(0.1)
-            if sender == config.JOBS_COMPUTER_ID and message and message.type == "REGISTER_ACK" then
-                if message.data.success then
-                    jobsComputerID = config.JOBS_COMPUTER_ID
-                    registered = true
-                    print("[Turtle] Successfully registered!")
-                    return true
-                end
+    while not jobsComputerId do
+        local id = rednet.lookup(PROTOCOL, "jobs")
+        if id then
+            print("Found Jobs Computer at ID " .. id)
+            rednet.send(id, {type = "REGISTER"}, PROTOCOL)
+            
+            local sender, msg = rednet.receive(PROTOCOL, 5)
+            if sender == id and msg and msg.type == "REGISTER_ACK" then
+                jobsComputerId = id
+                print("Registered successfully!")
+                break
             end
         end
-    end
-    
-    -- Try to find by hostname
-    print("[Turtle] Searching by hostname...")
-    local computers = network.findComputers("jobs")
-    
-    for _, id in ipairs(computers) do
-        print("[Turtle] Trying Jobs Computer ID " .. id .. "...")
         
-        network.send(id, "REGISTER", {
-            turtleType = "crafty",
-            fuelLevel = turtle and turtle.getFuelLevel() or 0
-        })
-        
-        -- Wait for response
-        local startTime = os.clock()
-        while os.clock() - startTime < 3 do
-            local sender, message = network.receive(0.1)
-            if sender == id and message and message.type == "REGISTER_ACK" then
-                if message.data.success then
-                    jobsComputerID = id
-                    registered = true
-                    print("[Turtle] Successfully registered with Jobs Computer ID " .. id .. "!")
-                    return true
-                end
-            end
-        end
+        print("Retrying in 5 seconds...")
+        sleep(5)
     end
-    
-    print("[Turtle] Could not register with Jobs Computer!")
-    print("[Turtle] Make sure Jobs Computer is running first")
-    return false
 end
 
 -- Send heartbeat
 local function sendHeartbeat()
-    if registered and jobsComputerID then
-        network.send(jobsComputerID, "HEARTBEAT", {
-            fuelLevel = turtle and turtle.getFuelLevel() or 0,
-            status = "idle"
-        })
+    if jobsComputerId then
+        rednet.send(jobsComputerId, {type = "HEARTBEAT"}, PROTOCOL)
     end
 end
 
--- Handle incoming messages
-local function handleMessage(sender, message)
-    if not message or not message.type then return end
+-- Pull items from chest
+local function pullItemsFromChest(itemName, count)
+    turtle.select(1)
     
-    if message.type == "PONG" then
-        -- Handled by ping function
+    -- Turn to face chest
+    local pulled = 0
+    
+    for i = 1, 16 do
+        if pulled >= count then break end
         
-    elseif message.type == "HEARTBEAT_ACK" and sender == jobsComputerID then
-        -- Heartbeat acknowledged
+        turtle.select(i)
+        local success = turtle.suck(count - pulled)
         
-    elseif message.type == "JOB_ASSIGN" and sender == jobsComputerID then
-        print("\n[Turtle] Received job assignment!")
-        local job = message.data
-        
-        if job.type == "CRAFT" then
-            -- Accept the job
-            network.send(jobsComputerID, "JOB_ACK", {
-                accepted = true,
-                jobId = job.id
-            })
-            
-            -- Perform the crafting
-            local crafting = dofile("lib/crafting_v2.lua")
-            local success, crafted, deposited = crafting.performCraft(
-                network, jobsComputerID,
-                job.recipe, job.quantity
-            )
-            
-            -- Report completion
-            network.send(jobsComputerID, "JOB_COMPLETE", {
-                jobId = job.id,
-                success = success,
-                crafted = crafted or 0,
-                deposited = deposited or {},
-                error = not success and crafted or nil
-            })
-        else
-            network.send(jobsComputerID, "JOB_ACK", {
-                accepted = false,
-                reason = "Unknown job type: " .. (job.type or "nil")
-            })
-        end
-        
-    elseif message.type == "DISCOVERY_START" and sender == jobsComputerID then
-        -- Legacy discovery message - no longer needed
-        print("\n[Turtle] Discovery now uses direct ID method")
-    end
-end
-
-
--- Request items from ME system
-local function requestItems()
-    if not registered or not jobsComputerID then
-        print("\n[Turtle] Not registered with Jobs Computer!")
-        sleep(2)
-        return
-    end
-    
-    clear()
-    print("Request Items from ME System")
-    print("============================")
-    print()
-    print("Enter item name (e.g. minecraft:cobblestone):")
-    write("> ")
-    local itemName = read()
-    
-    if itemName == "" then
-        return
-    end
-    
-    print("Enter quantity (default 64):")
-    write("> ")
-    local quantity = read()
-    quantity = tonumber(quantity) or 64
-    
-    print("\n[Turtle] Requesting " .. quantity .. "x " .. itemName .. "...")
-    
-    network.send(jobsComputerID, "REQUEST_ITEMS", {
-        item = itemName,
-        count = quantity
-    })
-    
-    -- Wait for response
-    local timeout = os.startTimer(5)
-    while true do
-        local event, p1, p2, p3 = os.pullEvent()
-        if event == "rednet_message" then
-            local sender, message, protocol = p1, p2, p3
-            if sender == jobsComputerID and message and message.type == "ITEMS_RESPONSE" then
-                os.cancelTimer(timeout)
-                if message.data.success then
-                    print("[Turtle] Received " .. message.data.count .. "x " .. message.data.item)
-                else
-                    print("[Turtle] Failed: " .. (message.data.error or "Unknown error"))
-                end
-                break
+        if success then
+            local detail = turtle.getItemDetail(i)
+            if detail and detail.name == itemName then
+                pulled = pulled + detail.count
+            else
+                -- Wrong item, put it back
+                turtle.drop()
             end
-        elseif event == "timer" and p1 == timeout then
-            print("[Turtle] Request timed out!")
+        end
+    end
+    
+    return pulled
+end
+
+-- Request items from Jobs Computer
+local function requestItems(itemName, count)
+    print("Requesting " .. count .. "x " .. itemName)
+    
+    rednet.send(jobsComputerId, {
+        type = "REQUEST_ITEMS",
+        item = itemName,
+        count = count
+    }, PROTOCOL)
+    
+    local sender, response = rednet.receive(PROTOCOL, 10)
+    if sender == jobsComputerId and response and response.type == "ITEMS_RESPONSE" then
+        if response.success then
+            print("Jobs Computer sent items, pulling from chest...")
+            
+            -- Wait a bit for items to arrive
+            sleep(3)
+            
+            -- Try to pull items from chest
+            local pulled = pullItemsFromChest(itemName, count)
+            if pulled >= count then
+                print("Got all items!")
+                return true
+            else
+                print("Only got " .. pulled .. " items")
+                return false
+            end
+        else
+            print("Failed: " .. (response.error or "Unknown error"))
+            return false
+        end
+    end
+    
+    print("No response from Jobs Computer")
+    return false
+end
+
+-- Deposit items to chest
+local function depositItems()
+    print("Depositing items...")
+    
+    for i = 1, 16 do
+        turtle.select(i)
+        turtle.drop()
+    end
+    
+    rednet.send(jobsComputerId, {
+        type = "DEPOSIT_ITEMS"
+    }, PROTOCOL)
+end
+
+-- Simple crafting function
+local function craft(recipe)
+    print("\n=== Starting Craft: " .. recipe.name .. " ===")
+    
+    -- Clear inventory first
+    depositItems()
+    
+    -- Request all items
+    local allItemsReceived = true
+    for _, ingredient in ipairs(recipe.ingredients) do
+        if not requestItems(ingredient.item, ingredient.count) then
+            allItemsReceived = false
             break
         end
     end
     
+    if not allItemsReceived then
+        print("Failed to get all items!")
+        depositItems()
+        return false
+    end
+    
+    -- Wait to ensure all items have arrived
+    print("Waiting for all items to settle...")
     sleep(2)
-end
-
--- Craft items
-local function craftItems()
-    if not registered or not jobsComputerID then
-        print("\n[Turtle] Not registered with Jobs Computer!")
-        sleep(2)
-        return
-    end
     
-    clear()
-    print("Craft Items")
-    print("===========")
-    print()
-    
-    -- Show available recipes
-    local recipes = dofile("recipes.lua")
-    print("Available recipes:")
-    local recipeList = {}
-    local index = 1
-    for name, recipe in pairs(recipes) do
-        if type(recipe) == "table" and recipe.result then
-            recipeList[index] = name
-            print(index .. ". " .. name .. " (x" .. recipe.count .. ")")
-            index = index + 1
+    -- Arrange items in crafting grid
+    print("Arranging items...")
+    for i, ingredient in ipairs(recipe.ingredients) do
+        if ingredient.slot and ingredient.slot <= 16 then
+            turtle.select(i)
+            turtle.transferTo(ingredient.slot)
         end
     end
     
-    print()
-    print("Enter recipe number (or 0 to cancel):")
-    write("> ")
-    local choice = tonumber(read())
-    
-    if not choice or choice == 0 or choice >= index then
-        return
-    end
-    
-    local recipeName = recipeList[choice]
-    local recipe = recipes.get(recipeName)
-    
-    print()
-    print("Recipe yields: " .. recipe.count .. " per craft")
-    print("How many " .. recipeName .. " do you want total?")
-    print("(Will craft in batches of " .. recipe.count .. ")")
-    write("> ")
-    local quantity = tonumber(read()) or recipe.count
-    
-    -- Calculate batches needed
-    local batchesNeeded = math.ceil(quantity / recipe.count)
-    local actualOutput = batchesNeeded * recipe.count
-    
-    if actualOutput > quantity then
-        print()
-        print("Note: Will craft " .. batchesNeeded .. " batch(es) = " .. actualOutput .. " items")
-        print("Continue? (Y/N)")
-        local confirm = read()
-        if string.upper(confirm) ~= "Y" then
-            return
-        end
-    end
-    
-    print("\n[Turtle] Starting craft job...")
-    
-    -- Use the new crafting system
-    local crafting = dofile("lib/crafting_v2.lua")
-    local success, crafted, deposited = crafting.performCraft(
-        network, jobsComputerID,
-        recipeName, quantity
-    )
+    -- Craft
+    print("Crafting...")
+    turtle.select(1)
+    local success = turtle.craft()
     
     if success then
-        print("\n[Turtle] Crafting complete!")
-        print("Requested: " .. quantity .. "x " .. recipeName)
-        print("Crafted: " .. crafted .. " items")
-        if crafted > quantity then
-            print("(Made extra due to batch size)")
-        end
-        print("\nDeposited to ME:")
-        for item, count in pairs(deposited) do
-            print("  " .. item .. " x" .. count)
-        end
+        print("Craft successful!")
     else
-        print("\n[Turtle] Crafting failed: " .. (crafted or "Unknown error"))
+        print("Craft failed!")
     end
     
-    sleep(2)
-end
-
--- Deposit items to ME system
-local function depositItems()
-    if not registered or not jobsComputerID then
-        print("\n[Turtle] Not registered with Jobs Computer!")
-        sleep(2)
-        return
-    end
-    
-    clear()
-    print("Deposit Items to ME System")
-    print("==========================")
-    print()
-    print("Current inventory:")
-    
-    -- Show inventory
-    for slot = 1, 16 do
-        local item = turtle.getItemDetail(slot)
-        if item then
-            print(string.format("Slot %2d: %s x%d", slot, item.name, item.count))
-        end
-    end
-    
-    print()
-    print("Enter slot number to deposit (1-16):")
-    write("> ")
-    local slot = tonumber(read())
-    
-    if not slot or slot < 1 or slot > 16 then
-        return
-    end
-    
-    turtle.select(slot)
-    local item = turtle.getItemDetail()
-    if not item then
-        print("\n[Turtle] Slot is empty!")
-        sleep(2)
-        return
-    end
-    
-    print("Deposit all " .. item.count .. " items? (Y/N)")
-    local confirm = read()
-    if string.upper(confirm) ~= "Y" then
-        return
-    end
-    
-    print("\n[Turtle] Depositing " .. item.count .. "x " .. item.name .. "...")
-    
-    -- First drop the items
-    if turtle.dropDown() then
-        -- Then notify Jobs Computer
-        network.send(jobsComputerID, "DEPOSIT_ITEMS", {
-            item = item.name,
-            count = item.count
-        })
-        
-        -- Wait for response
-        local timeout = os.startTimer(5)
-        while true do
-            local event, p1, p2, p3 = os.pullEvent()
-            if event == "rednet_message" then
-                local sender, message, protocol = p1, p2, p3
-                if sender == jobsComputerID and message and message.type == "DEPOSIT_RESPONSE" then
-                    os.cancelTimer(timeout)
-                    if message.data.success then
-                        print("[Turtle] Deposited " .. message.data.count .. "x " .. message.data.item)
-                    else
-                        print("[Turtle] Failed: " .. (message.data.error or "Unknown error"))
-                    end
-                    break
-                end
-            elseif event == "timer" and p1 == timeout then
-                print("[Turtle] Deposit confirmation timed out!")
-                break
-            end
-        end
-    else
-        print("[Turtle] Failed to drop items!")
-    end
-    
-    sleep(2)
-end
-
--- Main function
-local function main()
-    clear()
-    
-    -- Check if this is a crafty turtle
-    if not isCraftyTurtle() then
-        print("ERROR: This program requires a Crafty Turtle!")
-        print("\nPress any key to exit...")
-        os.pullEvent("key")
-        return
-    end
-    
-    print("Starting Turtle Client...")
-    
-    -- Initialize network
-    if not network.init() then
-        print("Failed to initialize network!")
-        return
-    end
-    
-    -- Host ourselves (optional)
-    network.host("turtle_" .. os.getComputerID())
-    
-    print("Turtle ready!")
+    -- Deposit results
     sleep(1)
+    depositItems()
     
-    -- Try to register
-    registerWithJobsComputer()
+    return success
+end
+
+-- Show menu
+local function showMenu()
+    clear()
+    print("=== Simple Crafting Turtle ===")
+    print()
+    print("Turtle ID: " .. os.getComputerID())
+    print("Jobs Computer: " .. (jobsComputerId and ("Connected #" .. jobsComputerId) or "Not Connected"))
+    print()
+    print("Commands:")
+    print("  C - Craft item")
+    print("  T - Test craft (stick)")
+    print("  Q - Quit")
+end
+
+-- Test craft - make a stick
+local function testCraft()
+    local stickRecipe = {
+        name = "Stick",
+        ingredients = {
+            {item = "minecraft:oak_planks", count = 2, slot = 2},
+            {item = "minecraft:oak_planks", count = 2, slot = 5}
+        }
+    }
     
-    -- Main loop
-    local lastDisplay = os.clock()
-    local lastHeartbeat = os.clock()
+    craft(stickRecipe)
+end
+
+-- Main loop
+local function main()
+    findJobsComputer()
+    
+    -- Heartbeat timer
+    local heartbeatTimer = os.startTimer(HEARTBEAT_INTERVAL)
     
     while running do
-        -- Check for messages
-        local sender, message = network.receive(0.1)
-        if sender then
-            handleMessage(sender, message)
-        end
+        showMenu()
         
-        -- Send heartbeat
-        if registered and os.clock() - lastHeartbeat > config.HEARTBEAT_INTERVAL then
+        local event, param = os.pullEvent()
+        
+        if event == "timer" and param == heartbeatTimer then
             sendHeartbeat()
-            lastHeartbeat = os.clock()
-        end
-        
-        -- Update display
-        if os.clock() - lastDisplay > 1 then
-            displayStatus()
-            lastDisplay = os.clock()
-        end
-        
-        -- Check for user input (non-blocking)
-        local timer = os.startTimer(0.1)
-        local event, p1, p2 = os.pullEvent()
-        if event == "key" then
-            os.cancelTimer(timer)
-            if p1 == keys.q then
+            heartbeatTimer = os.startTimer(HEARTBEAT_INTERVAL)
+            
+        elseif event == "key" then
+            if param == keys.q then
                 running = false
-            elseif p1 == keys.r then
-                print("\n[Turtle] Re-registering...")
-                registered = false
-                registerWithJobsComputer()
-                sleep(1)
-            elseif p1 == keys.f and turtle then
-                turtle.select(16)
-                if turtle.refuel() then
-                    print("\n[Turtle] Refueled! New level: " .. turtle.getFuelLevel())
-                else
-                    print("\n[Turtle] No fuel in slot 16!")
-                end
-                sleep(1)
-            elseif p1 == keys.g then
-                requestItems()
-            elseif p1 == keys.d then
+                
+            elseif param == keys.c then
+                clear()
+                print("Enter item to craft (e.g., minecraft:stick):")
+                local itemName = read()
+                
+                -- For demo, just request 64 of the item
+                -- In real use, you'd have recipes defined
+                requestItems(itemName, 64)
+                sleep(2)
                 depositItems()
-            elseif p1 == keys.c then
-                craftItems()
+                
+            elseif param == keys.t then
+                testCraft()
+                print("\nPress any key to continue...")
+                os.pullEvent("key")
             end
-        elseif event == "timer" and p1 == timer then
-            -- Timer expired, continue loop
-        else
-            os.cancelTimer(timer)
         end
     end
     
-    -- Cleanup
-    if registered and jobsComputerID then
-        -- Tell Jobs Computer we're shutting down
-        network.send(jobsComputerID, "UNREGISTER", {})
-        sleep(0.1)  -- Give time for message to send
-    end
-    
-    network.close()
     clear()
-    print("Turtle stopped.")
+    print("Shutting down...")
 end
 
--- Run with error handling
-local ok, err = pcall(main)
-if not ok then
-    print("ERROR: " .. tostring(err))
-    print("\nPress any key to exit...")
-    os.pullEvent("key")
-end
+-- Run
+main()

@@ -1,48 +1,49 @@
--- TurtleCraft Startup Script
--- Detects computer type and runs appropriate program
+-- Simple TurtleCraft Startup Script
 
-print("TurtleCraft Startup")
-print("===================")
-print()
+local function clear()
+    term.clear()
+    term.setCursorPos(1, 1)
+end
 
--- Check what type of computer this is
+-- Check if this is a turtle
 if turtle then
-    print("Detected: Turtle")
-    print("Starting turtle client...")
-    sleep(1)
+    print("Starting Turtle Program...")
     shell.run("turtle.lua")
-else
-    -- Check if this is the jobs computer
-    local label = os.getComputerLabel()
+    return
+end
+
+-- Check if labeled as jobs computer
+local label = os.getComputerLabel()
+if label and label:lower() == "jobs" then
+    print("Starting Jobs Computer...")
+    shell.run("jobs_computer.lua")
+    return
+end
+
+-- Otherwise show menu
+while true do
+    clear()
+    print("=== TurtleCraft Startup ===")
+    print()
+    print("What is this computer?")
+    print()
+    print("1. Jobs Computer (ME System Manager)")
+    print("2. Exit")
+    print()
+    print("Choice: ")
     
-    if label and label:lower() == "jobs" then
-        print("Detected: Jobs Computer (by label)")
-        print("Starting jobs computer...")
-        sleep(1)
+    local choice = read()
+    
+    if choice == "1" then
+        os.setComputerLabel("jobs")
+        print("\nLabeled as Jobs Computer")
+        print("Starting Jobs Computer...")
+        sleep(2)
         shell.run("jobs_computer.lua")
-    else
-        -- Unknown computer type
-        print("Detected: Computer")
-        print()
-        print("This computer is not configured.")
-        print()
-        print("Options:")
-        print("1. Run Jobs Computer")
-        print("2. Exit")
-        print()
-        print("Note: To automatically start the Jobs Computer,")
-        print("set the computer label to 'jobs' using:")
-        print("  label set jobs")
-        print()
-        write("Choice (1-2): ")
-        
-        local choice = read()
-        
-        if choice == "1" then
-            shell.run("jobs_computer.lua")
-        else
-            print()
-            print("Exiting startup.")
-        end
+        break
+    elseif choice == "2" then
+        clear()
+        print("Exiting...")
+        break
     end
 end
