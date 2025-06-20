@@ -403,7 +403,7 @@ local function install()
     addScrollLine("  2. Turtles: Run 'start-turtle' or 'startup'", colors.white)
     addScrollLine("", colors.white)
     addScrollLine("Setup Requirements:", colors.cyan)
-    addScrollLine("  - Jobs Computer: ME Bridge on back, wired network", colors.white)
+    addScrollLine("  - Jobs Computer: ME Bridge attached (any side)", colors.white)
     addScrollLine("  - Turtles: Connect to same wired network", colors.white)
     addScrollLine("  - Both: Need wireless modems for rednet", colors.white)
     

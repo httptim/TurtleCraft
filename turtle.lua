@@ -1,7 +1,18 @@
 -- Simple Crafting Turtle with Recipes
 
-local PROTOCOL = "turtlecraft"
-local HEARTBEAT_INTERVAL = 5
+-- Load config or use defaults
+local config
+if fs.exists("config.lua") then
+    config = dofile("config.lua")
+else
+    -- Use default config if file doesn't exist
+    config = {
+        PROTOCOL = "turtlecraft",
+        HEARTBEAT_INTERVAL = 30,
+        DEBUG = false
+    }
+end
+
 local ITEM_WAIT_TIME = 15  -- Max seconds to wait for items
 
 -- State
@@ -94,12 +105,12 @@ local function findJobsComputer()
     print("Looking for Jobs Computer...")
     
     while not jobsComputerId do
-        local id = rednet.lookup(PROTOCOL, "jobs")
+        local id = rednet.lookup(config.PROTOCOL, "jobs")
         if id then
             print("Found Jobs Computer at ID " .. id)
-            rednet.send(id, {type = "REGISTER"}, PROTOCOL)
+            rednet.send(id, {type = "REGISTER"}, config.PROTOCOL)
             
-            local sender, msg = rednet.receive(PROTOCOL, 5)
+            local sender, msg = rednet.receive(config.PROTOCOL, 5)
             if sender == id and msg and msg.type == "REGISTER_ACK" then
                 jobsComputerId = id
                 print("Registered successfully!")
@@ -122,7 +133,7 @@ local function handleIdentify(sender, message)
             rednet.send(sender, {
                 type = "IDENTIFY_RESPONSE",
                 peripheralName = peripheralName
-            }, PROTOCOL)
+            }, config.PROTOCOL)
             print("Identified as: " .. peripheralName)
         end
     end
@@ -131,7 +142,7 @@ end
 -- Send heartbeat
 local function sendHeartbeat()
     if jobsComputerId then
-        rednet.send(jobsComputerId, {type = "HEARTBEAT"}, PROTOCOL)
+        rednet.send(jobsComputerId, {type = "HEARTBEAT"}, config.PROTOCOL)
     end
 end
 
@@ -148,10 +159,10 @@ local function requestAndWaitForItems(itemName, count)
         type = "REQUEST_ITEMS",
         item = itemName,
         count = count
-    }, PROTOCOL)
+    }, config.PROTOCOL)
     
     -- Wait for response
-    local sender, response = rednet.receive(PROTOCOL, 10)
+    local sender, response = rednet.receive(config.PROTOCOL, 10)
     if not (sender == jobsComputerId and response and response.type == "ITEMS_RESPONSE") then
         print("No response from Jobs Computer")
         return false
@@ -202,7 +213,7 @@ local function returnItems()
                 type = "PULL_ITEMS",
                 item = item.name,
                 count = item.count
-            }, PROTOCOL)
+            }, config.PROTOCOL)
             
             -- Wait a bit for the pull
             sleep(0.5)
@@ -319,7 +330,7 @@ local function main()
     findJobsComputer()
     
     -- Start heartbeat
-    local heartbeatTimer = os.startTimer(HEARTBEAT_INTERVAL)
+    local heartbeatTimer = os.startTimer(config.HEARTBEAT_INTERVAL)
     
     while running do
         showMenu()
@@ -328,7 +339,7 @@ local function main()
         
         if event == "timer" and param == heartbeatTimer then
             sendHeartbeat()
-            heartbeatTimer = os.startTimer(HEARTBEAT_INTERVAL)
+            heartbeatTimer = os.startTimer(config.HEARTBEAT_INTERVAL)
             
         elseif event == "rednet_message" and param == jobsComputerId then
             local message = param2
