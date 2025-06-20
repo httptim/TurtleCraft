@@ -156,9 +156,6 @@ local function handleMessage()
         }
         rednet.send(sender, {type = "REGISTER_ACK"}, config.PROTOCOL)
         
-        -- Auto-discover if we have wired turtles
-        discoverWiredTurtles()
-        
     elseif message.type == "HEARTBEAT" then
         if turtles[sender] then
             turtles[sender].lastSeen = os.clock()
@@ -304,15 +301,24 @@ local function main()
                 end
             end,
             function()
-                local event, key = os.pullEvent("key")
-                if key == keys.q then
-                    clear()
-                    print("Shutting down...")
-                    rednet.unhost(config.PROTOCOL)
-                    return
-                elseif key == keys.d then
+                -- Auto-discovery every 30 seconds
+                while true do
+                    sleep(30)
                     discoverWiredTurtles()
-                    sleep(2)
+                end
+            end,
+            function()
+                while true do
+                    local event, key = os.pullEvent("key")
+                    if key == keys.q then
+                        clear()
+                        print("Shutting down...")
+                        rednet.unhost(config.PROTOCOL)
+                        return
+                    elseif key == keys.d then
+                        discoverWiredTurtles()
+                        sleep(2)
+                    end
                 end
             end
         )
