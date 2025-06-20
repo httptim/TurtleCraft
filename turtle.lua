@@ -1,12 +1,56 @@
--- Simple Crafting Turtle for TurtleCraft
+-- Simple Crafting Turtle with Recipes
 
 local PROTOCOL = "turtlecraft"
 local HEARTBEAT_INTERVAL = 5
-local CHEST_DIRECTION = "front"  -- Where to get/put items
+local ITEM_WAIT_TIME = 15  -- Max seconds to wait for items
 
 -- State
 local jobsComputerId = nil
 local running = true
+local peripheralName = nil
+
+-- Recipes (add more as needed)
+local recipes = {
+    ["minecraft:stick"] = {
+        name = "Stick",
+        result = {item = "minecraft:stick", count = 4},
+        ingredients = {
+            {item = "minecraft:oak_planks", count = 1, slot = 2},
+            {item = "minecraft:oak_planks", count = 1, slot = 6}
+        }
+    },
+    ["minecraft:oak_planks"] = {
+        name = "Oak Planks",
+        result = {item = "minecraft:oak_planks", count = 4},
+        ingredients = {
+            {item = "minecraft:oak_log", count = 1, slot = 1}
+        }
+    },
+    ["minecraft:crafting_table"] = {
+        name = "Crafting Table",
+        result = {item = "minecraft:crafting_table", count = 1},
+        ingredients = {
+            {item = "minecraft:oak_planks", count = 1, slot = 1},
+            {item = "minecraft:oak_planks", count = 1, slot = 2},
+            {item = "minecraft:oak_planks", count = 1, slot = 5},
+            {item = "minecraft:oak_planks", count = 1, slot = 6}
+        }
+    },
+    ["minecraft:chest"] = {
+        name = "Chest",
+        result = {item = "minecraft:chest", count = 1},
+        ingredients = {
+            {item = "minecraft:oak_planks", count = 1, slot = 1},
+            {item = "minecraft:oak_planks", count = 1, slot = 2},
+            {item = "minecraft:oak_planks", count = 1, slot = 3},
+            {item = "minecraft:oak_planks", count = 1, slot = 5},
+            {item = "minecraft:oak_planks", count = 1, slot = 7},
+            {item = "minecraft:oak_planks", count = 1, slot = 9},
+            {item = "minecraft:oak_planks", count = 1, slot = 10},
+            {item = "minecraft:oak_planks", count = 1, slot = 11}
+        }
+    }
+}
 
 -- Initialize
 print("Simple Crafting Turtle Starting...")
@@ -19,6 +63,30 @@ peripheral.find("modem", rednet.open)
 local function clear()
     term.clear()
     term.setCursorPos(1, 1)
+end
+
+-- Clear inventory
+local function clearInventory()
+    for slot = 1, 16 do
+        turtle.select(slot)
+        local item = turtle.getItemDetail()
+        if item then
+            turtle.drop()
+        end
+    end
+    turtle.select(1)
+end
+
+-- Count items in inventory
+local function countItem(itemName)
+    local count = 0
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item and item.name == itemName then
+            count = count + item.count
+        end
+    end
+    return count
 end
 
 -- Find and register with Jobs Computer
@@ -44,6 +112,22 @@ local function findJobsComputer()
     end
 end
 
+-- Handle identify request
+local function handleIdentify(sender, message)
+    if message.peripheralName then
+        -- Check if this peripheral could be us
+        local myPeripheral = peripheral.wrap(message.peripheralName)
+        if myPeripheral and peripheral.getType(message.peripheralName) == "turtle" then
+            peripheralName = message.peripheralName
+            rednet.send(sender, {
+                type = "IDENTIFY_RESPONSE",
+                peripheralName = peripheralName
+            }, PROTOCOL)
+            print("Identified as: " .. peripheralName)
+        end
+    end
+end
+
 -- Send heartbeat
 local function sendHeartbeat()
     if jobsComputerId then
@@ -51,135 +135,159 @@ local function sendHeartbeat()
     end
 end
 
--- Pull items from chest
-local function pullItemsFromChest(itemName, count)
-    turtle.select(1)
+-- Request items and wait for them to arrive
+local function requestAndWaitForItems(itemName, count)
+    print("\nRequesting " .. count .. "x " .. itemName)
     
-    -- Turn to face chest
-    local pulled = 0
+    -- Check current inventory
+    local startCount = countItem(itemName)
+    print("Current inventory: " .. startCount)
     
-    for i = 1, 16 do
-        if pulled >= count then break end
-        
-        turtle.select(i)
-        local success = turtle.suck(count - pulled)
-        
-        if success then
-            local detail = turtle.getItemDetail(i)
-            if detail and detail.name == itemName then
-                pulled = pulled + detail.count
-            else
-                -- Wrong item, put it back
-                turtle.drop()
-            end
-        end
-    end
-    
-    return pulled
-end
-
--- Request items from Jobs Computer
-local function requestItems(itemName, count)
-    print("Requesting " .. count .. "x " .. itemName)
-    
+    -- Send request
     rednet.send(jobsComputerId, {
         type = "REQUEST_ITEMS",
         item = itemName,
         count = count
     }, PROTOCOL)
     
+    -- Wait for response
     local sender, response = rednet.receive(PROTOCOL, 10)
-    if sender == jobsComputerId and response and response.type == "ITEMS_RESPONSE" then
-        if response.success then
-            print("Jobs Computer sent items, pulling from chest...")
+    if not (sender == jobsComputerId and response and response.type == "ITEMS_RESPONSE") then
+        print("No response from Jobs Computer")
+        return false
+    end
+    
+    if not response.success then
+        print("Request failed: " .. (response.error or "Unknown error"))
+        return false
+    end
+    
+    print("Jobs Computer sent " .. response.count .. " items")
+    
+    -- Now wait for items to actually arrive in inventory
+    local targetCount = startCount + response.count
+    local waitStart = os.clock()
+    
+    print("Waiting for items to arrive...")
+    while os.clock() - waitStart < ITEM_WAIT_TIME do
+        local currentCount = countItem(itemName)
+        
+        if currentCount >= targetCount then
+            print("Items received! Total: " .. currentCount)
+            return true
+        end
+        
+        -- Show progress
+        if math.floor(os.clock() - waitStart) % 2 == 0 then
+            print("Still waiting... Current: " .. currentCount .. "/" .. targetCount)
+        end
+        
+        sleep(0.5)
+    end
+    
+    local finalCount = countItem(itemName)
+    print("Timeout! Only received: " .. finalCount .. "/" .. targetCount)
+    return finalCount > startCount  -- Return true if we got any items
+end
+
+-- Return items to ME system
+local function returnItems()
+    print("\nReturning items to ME system...")
+    
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item then
+            turtle.select(slot)
+            rednet.send(jobsComputerId, {
+                type = "PULL_ITEMS",
+                item = item.name,
+                count = item.count
+            }, PROTOCOL)
             
-            -- Wait a bit for items to arrive
-            sleep(3)
-            
-            -- Try to pull items from chest
-            local pulled = pullItemsFromChest(itemName, count)
-            if pulled >= count then
-                print("Got all items!")
-                return true
-            else
-                print("Only got " .. pulled .. " items")
-                return false
+            -- Wait a bit for the pull
+            sleep(0.5)
+        end
+    end
+    
+    turtle.select(1)
+end
+
+-- Craft an item
+local function craftItem(recipeName, quantity)
+    local recipe = recipes[recipeName]
+    if not recipe then
+        print("Unknown recipe: " .. recipeName)
+        return false
+    end
+    
+    quantity = quantity or 1
+    local batches = math.ceil(quantity / recipe.result.count)
+    
+    print("\n=== Crafting " .. recipe.name .. " x" .. quantity .. " ===")
+    print("Will craft " .. batches .. " batches")
+    
+    -- Clear inventory first
+    returnItems()
+    
+    for batch = 1, batches do
+        print("\n--- Batch " .. batch .. "/" .. batches .. " ---")
+        
+        -- Request all ingredients
+        local ingredients = {}
+        for _, ing in ipairs(recipe.ingredients) do
+            local itemName = ing.item
+            if not ingredients[itemName] then
+                ingredients[itemName] = 0
             end
+            ingredients[itemName] = ingredients[itemName] + ing.count
+        end
+        
+        -- Request each unique ingredient
+        local allReceived = true
+        for itemName, totalCount in pairs(ingredients) do
+            if not requestAndWaitForItems(itemName, totalCount) then
+                allReceived = false
+                break
+            end
+        end
+        
+        if not allReceived then
+            print("Failed to get all ingredients!")
+            returnItems()
+            return false
+        end
+        
+        -- Arrange items in crafting grid
+        print("\nArranging items...")
+        for _, ing in ipairs(recipe.ingredients) do
+            -- Find the item in inventory
+            for invSlot = 1, 16 do
+                local item = turtle.getItemDetail(invSlot)
+                if item and item.name == ing.item then
+                    turtle.select(invSlot)
+                    turtle.transferTo(ing.slot, ing.count)
+                    break
+                end
+            end
+        end
+        
+        -- Craft
+        print("Crafting...")
+        turtle.select(1)
+        if turtle.craft() then
+            print("Success!")
         else
-            print("Failed: " .. (response.error or "Unknown error"))
+            print("Craft failed!")
+            returnItems()
             return false
         end
     end
     
-    print("No response from Jobs Computer")
-    return false
-end
-
--- Deposit items to chest
-local function depositItems()
-    print("Depositing items...")
-    
-    for i = 1, 16 do
-        turtle.select(i)
-        turtle.drop()
-    end
-    
-    rednet.send(jobsComputerId, {
-        type = "DEPOSIT_ITEMS"
-    }, PROTOCOL)
-end
-
--- Simple crafting function
-local function craft(recipe)
-    print("\n=== Starting Craft: " .. recipe.name .. " ===")
-    
-    -- Clear inventory first
-    depositItems()
-    
-    -- Request all items
-    local allItemsReceived = true
-    for _, ingredient in ipairs(recipe.ingredients) do
-        if not requestItems(ingredient.item, ingredient.count) then
-            allItemsReceived = false
-            break
-        end
-    end
-    
-    if not allItemsReceived then
-        print("Failed to get all items!")
-        depositItems()
-        return false
-    end
-    
-    -- Wait to ensure all items have arrived
-    print("Waiting for all items to settle...")
-    sleep(2)
-    
-    -- Arrange items in crafting grid
-    print("Arranging items...")
-    for i, ingredient in ipairs(recipe.ingredients) do
-        if ingredient.slot and ingredient.slot <= 16 then
-            turtle.select(i)
-            turtle.transferTo(ingredient.slot)
-        end
-    end
-    
-    -- Craft
-    print("Crafting...")
-    turtle.select(1)
-    local success = turtle.craft()
-    
-    if success then
-        print("Craft successful!")
-    else
-        print("Craft failed!")
-    end
-    
-    -- Deposit results
+    -- Return results
     sleep(1)
-    depositItems()
+    returnItems()
     
-    return success
+    return true
 end
 
 -- Show menu
@@ -189,67 +297,77 @@ local function showMenu()
     print()
     print("Turtle ID: " .. os.getComputerID())
     print("Jobs Computer: " .. (jobsComputerId and ("Connected #" .. jobsComputerId) or "Not Connected"))
+    if peripheralName then
+        print("Peripheral: " .. peripheralName)
+    end
+    print()
+    print("Recipes:")
+    local i = 1
+    for id, recipe in pairs(recipes) do
+        print("  " .. i .. ". " .. recipe.name)
+        i = i + 1
+    end
     print()
     print("Commands:")
-    print("  C - Craft item")
-    print("  T - Test craft (stick)")
+    print("  1-9 - Craft recipe")
+    print("  R - Return all items")
     print("  Q - Quit")
-end
-
--- Test craft - make a stick
-local function testCraft()
-    local stickRecipe = {
-        name = "Stick",
-        ingredients = {
-            {item = "minecraft:oak_planks", count = 2, slot = 2},
-            {item = "minecraft:oak_planks", count = 2, slot = 5}
-        }
-    }
-    
-    craft(stickRecipe)
 end
 
 -- Main loop
 local function main()
     findJobsComputer()
     
-    -- Heartbeat timer
+    -- Start heartbeat
     local heartbeatTimer = os.startTimer(HEARTBEAT_INTERVAL)
     
     while running do
         showMenu()
         
-        local event, param = os.pullEvent()
+        local event, param, param2 = os.pullEvent()
         
         if event == "timer" and param == heartbeatTimer then
             sendHeartbeat()
             heartbeatTimer = os.startTimer(HEARTBEAT_INTERVAL)
             
+        elseif event == "rednet_message" and param == jobsComputerId then
+            local message = param2
+            if message and message.type == "IDENTIFY" then
+                handleIdentify(param, message)
+            end
+            
         elseif event == "key" then
             if param == keys.q then
                 running = false
                 
-            elseif param == keys.c then
-                clear()
-                print("Enter item to craft (e.g., minecraft:stick):")
-                local itemName = read()
-                
-                -- For demo, just request 64 of the item
-                -- In real use, you'd have recipes defined
-                requestItems(itemName, 64)
-                sleep(2)
-                depositItems()
-                
-            elseif param == keys.t then
-                testCraft()
-                print("\nPress any key to continue...")
+            elseif param == keys.r then
+                returnItems()
+                print("\nPress any key...")
                 os.pullEvent("key")
+                
+            elseif param >= keys.one and param <= keys.nine then
+                local index = param - keys.one + 1
+                local recipeList = {}
+                for id, recipe in pairs(recipes) do
+                    table.insert(recipeList, id)
+                end
+                
+                if index <= #recipeList then
+                    clear()
+                    print("How many to craft? ")
+                    local amount = tonumber(read()) or 1
+                    
+                    craftItem(recipeList[index], amount)
+                    print("\nPress any key...")
+                    os.pullEvent("key")
+                end
             end
         end
     end
     
     clear()
     print("Shutting down...")
+    returnItems()
 end
 
 -- Run
