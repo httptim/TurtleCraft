@@ -22,7 +22,6 @@ local FILES = {
     {url = "recipes.lua", path = "recipes.lua"},
     
     -- Main programs
-    {url = "main_computer.lua", path = "main_computer.lua"},
     {url = "jobs_computer.lua", path = "jobs_computer.lua"},
     {url = "turtle.lua", path = "turtle.lua"},
     
@@ -41,11 +40,6 @@ local DIRECTORIES = {
 
 -- Launcher scripts
 local LAUNCHERS = {
-    {
-        name = "start-main",
-        content = [[-- Main Computer Launcher
-shell.run("main_computer.lua")]]
-    },
     {
         name = "start-jobs",
         content = [[-- Jobs Computer Launcher
@@ -246,7 +240,7 @@ local function drawTitle()
     
     centerText(11, "GitHub Installer", colors.lightBlue)
     centerText(12, "TurtleCraft - Distributed Crafting System", colors.white)
-    centerText(13, "Simple Network Implementation", colors.yellow)
+    centerText(13, "Jobs Computer & Turtle Architecture", colors.yellow)
 end
 
 -- Create progress bar string
@@ -423,9 +417,8 @@ local function install()
     addScrollLine("+ Installation complete!", colors.lime)
     addScrollLine("", colors.white)
     addScrollLine("To start the system:", colors.yellow)
-    addScrollLine("  1. Jobs Computer: Run 'start-jobs' (START FIRST!)", colors.white)
-    addScrollLine("  2. Main Computer: Run 'start-main'", colors.white)
-    addScrollLine("  3. Turtles: Run 'start-turtle'", colors.white)
+    addScrollLine("  1. Jobs Computer: Run 'start-jobs'", colors.white)
+    addScrollLine("  2. Turtles: Run 'start-turtle'", colors.white)
     addScrollLine("", colors.white)
     addScrollLine("Or run 'startup' for a menu", colors.cyan)
     addScrollLine("Run 'test_network' to test connectivity", colors.cyan)
@@ -438,8 +431,8 @@ local function install()
     term.setCursorPos(1, termHeight - 2)
     term.setTextColor(colors.yellow)
     print("Select computer type to start:")
-    print("1) Jobs Computer  2) Main Computer  3) Turtle  4) Exit")
-    write("Choice (1-4): ")
+    print("1) Jobs Computer  2) Turtle  3) Exit")
+    write("Choice (1-3): ")
     local answer = read()
     
     if answer == "1" then
@@ -447,10 +440,6 @@ local function install()
         term.setCursorPos(1, 1)
         shell.run("start-jobs")
     elseif answer == "2" then
-        term.clear()
-        term.setCursorPos(1, 1)
-        shell.run("start-main")
-    elseif answer == "3" then
         term.clear()
         term.setCursorPos(1, 1)
         shell.run("start-turtle")

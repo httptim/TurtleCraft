@@ -71,6 +71,7 @@ local function displayStatus()
     end
     print()
     print("Commands:")
+    print("  C - Craft Items")
     print("  I - Show ME Items")
     print("  S - Search Items")
     print("  D - Discover wired turtles")
@@ -209,12 +210,10 @@ local function handleMessage(sender, message)
             return
         end
         
-        print("[Jobs] About to export " .. count .. "x " .. itemName .. " to " .. turtlePeripheral)
+        print("[Jobs] Starting verified export of " .. count .. "x " .. itemName .. " to " .. turtlePeripheral)
         
-        -- Export items from ME to turtle using peripheral name
-        local exported, err = me_bridge.exportItemToPeripheral(itemName, count, turtlePeripheral)
-        
-        print("[Jobs] Export result: exported=" .. tostring(exported) .. ", err=" .. tostring(err))
+        -- Export items with verification
+        local exported, err = exportItemWithVerification(itemName, count, turtlePeripheral, sender)
         
         if exported and exported > 0 then
             network.send(sender, "ITEMS_RESPONSE", {
@@ -222,7 +221,7 @@ local function handleMessage(sender, message)
                 item = itemName,
                 count = exported
             })
-            print("[Jobs] Exported " .. exported .. "x " .. itemName .. " to " .. turtlePeripheral)
+            print("[Jobs] Successfully delivered " .. exported .. "x " .. itemName .. " to Turtle #" .. sender)
         else
             network.send(sender, "ITEMS_RESPONSE", {
                 success = false,
@@ -582,6 +581,84 @@ local function showMEItems()
     os.pullEvent("key")
 end
 
+-- Export items with verification
+local function exportItemWithVerification(itemName, count, turtlePeripheral, turtleId, maxWaitTime)
+    if not me_bridge.isConnected() then
+        return nil, "ME Bridge not connected"
+    end
+    
+    maxWaitTime = maxWaitTime or 10 -- Default 10 seconds
+    
+    print("[Jobs] Verifying export of " .. count .. "x " .. itemName .. " to Turtle #" .. turtleId)
+    
+    -- Get turtle peripheral
+    local turtle = peripheral.wrap(turtlePeripheral)
+    if not turtle then
+        return nil, "Failed to wrap turtle peripheral"
+    end
+    
+    -- Check initial inventory state
+    local initialCount = 0
+    for slot = 1, 16 do
+        local slotInfo = turtle.getItemDetail(slot)
+        if slotInfo and slotInfo.name == itemName then
+            initialCount = initialCount + slotInfo.count
+        end
+    end
+    print("[Jobs] Initial count in turtle: " .. initialCount)
+    
+    -- Export items
+    local exported, err = me_bridge.exportItemToPeripheral(itemName, count, turtlePeripheral)
+    if not exported or exported <= 0 then
+        return nil, err or "Failed to export items"
+    end
+    
+    print("[Jobs] ME Bridge reported export of " .. exported .. " items")
+    print("[Jobs] Waiting for items to arrive in turtle inventory...")
+    
+    -- Poll turtle inventory until items arrive or timeout
+    local startTime = os.clock()
+    local targetCount = initialCount + exported
+    
+    while os.clock() - startTime < maxWaitTime do
+        -- Count items in turtle inventory
+        local currentCount = 0
+        for slot = 1, 16 do
+            local slotInfo = turtle.getItemDetail(slot)
+            if slotInfo and slotInfo.name == itemName then
+                currentCount = currentCount + slotInfo.count
+            end
+        end
+        
+        -- Check if we've received the expected amount
+        if currentCount >= targetCount then
+            local received = currentCount - initialCount
+            print("[Jobs] Verified: " .. received .. " items arrived in turtle inventory")
+            return received
+        end
+        
+        -- Small delay to avoid hammering the peripheral
+        sleep(0.2)
+    end
+    
+    -- Timeout - check final state
+    local finalCount = 0
+    for slot = 1, 16 do
+        local slotInfo = turtle.getItemDetail(slot)
+        if slotInfo and slotInfo.name == itemName then
+            finalCount = finalCount + slotInfo.count
+        end
+    end
+    
+    local received = finalCount - initialCount
+    if received > 0 then
+        print("[Jobs] Warning: Only " .. received .. " of " .. exported .. " items arrived")
+        return received
+    else
+        return nil, "Items never arrived in turtle inventory after " .. maxWaitTime .. " seconds"
+    end
+end
+
 -- Search for items
 local function searchMEItems()
     if not me_bridge.isConnected() then
@@ -633,6 +710,77 @@ local function searchMEItems()
         end
     end
     
+    print("\nPress any key to continue...")
+    os.pullEvent("key")
+end
+
+-- Craft items UI
+local function craftItemsUI()
+    if not me_bridge.isConnected() then
+        print("\n[ME] Not connected to ME Bridge!")
+        sleep(2)
+        return
+    end
+    
+    -- Find an available turtle
+    local availableTurtle = nil
+    for _, turtle in ipairs(turtles) do
+        if turtle.status == "online" then
+            availableTurtle = turtle
+            break
+        end
+    end
+    
+    if not availableTurtle then
+        print("\n[Jobs] No turtles available!")
+        print("Make sure at least one turtle is running and registered.")
+        print("\nPress any key to continue...")
+        os.pullEvent("key")
+        return
+    end
+    
+    clear()
+    print("Craft Items")
+    print("============")
+    print()
+    print("Available Turtle: #" .. availableTurtle.id)
+    print()
+    print("Enter recipe name (or empty to cancel):")
+    write("> ")
+    
+    local recipeName = read()
+    if recipeName == "" then
+        return
+    end
+    
+    print("\nEnter quantity (default 1):")
+    write("> ")
+    
+    local quantityStr = read()
+    local quantity = tonumber(quantityStr) or 1
+    
+    if quantity < 1 then
+        print("\nInvalid quantity!")
+        sleep(2)
+        return
+    end
+    
+    print("\nSending crafting job...")
+    
+    -- Create job ID
+    local jobId = "job_" .. os.epoch("local")
+    
+    -- Send job to turtle
+    network.send(availableTurtle.id, "JOB_ASSIGN", {
+        id = jobId,
+        type = "CRAFT",
+        recipe = recipeName,
+        quantity = quantity
+    })
+    
+    print("\nJob " .. jobId .. " sent to Turtle #" .. availableTurtle.id)
+    print("Recipe: " .. recipeName .. " x" .. quantity)
+    print("\nThe turtle will handle the crafting process.")
     print("\nPress any key to continue...")
     os.pullEvent("key")
 end
@@ -787,6 +935,8 @@ local function main()
             os.cancelTimer(timer)
             if p1 == keys.q then
                 running = false
+            elseif p1 == keys.c then
+                craftItemsUI()
             elseif p1 == keys.i then
                 showMEItems()
             elseif p1 == keys.s then

@@ -79,15 +79,16 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
         itemsToReceive[itemName] = count
     end
     
-    local responseTimeout = os.startTimer(10)
+    local responseTimeout = os.startTimer(15)  -- Increased timeout to 15 seconds
+    print("\nWaiting for Jobs Computer responses...")
     while next(itemsToReceive) do
         local event, p1, p2, p3 = os.pullEvent()
         if event == "timer" and p1 == responseTimeout then
-            local missing = ""
+            local missing = {}
             for item, _ in pairs(itemsToReceive) do
-                missing = missing .. item .. ", "
+                table.insert(missing, item)
             end
-            return nil, "Timeout waiting for responses for: " .. missing
+            return nil, "Timeout waiting for items: " .. table.concat(missing, ", ")
         elseif event == "rednet_message" then
             local sender, message = p1, p2
             if sender == jobsComputerID and message and message.type == "ITEMS_RESPONSE" then
@@ -95,7 +96,7 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
                     local itemName = message.data.item
                     received[itemName] = message.data.count
                     itemsToReceive[itemName] = nil
-                    print("  Response received for " .. itemName)
+                    print("  [OK] Response received for " .. itemName .. " (" .. message.data.count .. " items)")
                 else
                     os.cancelTimer(responseTimeout)
                     local itemName = message.data.item or "unknown"
@@ -106,52 +107,57 @@ function crafting_v2.requestItems(network, jobsComputerID, itemsNeeded)
     end
     os.cancelTimer(responseTimeout)
     
-    -- Now wait for ALL items to actually arrive in inventory
-    print("\nWaiting for all items to arrive in inventory...")
-    local waitStart = os.clock()
-    local maxWaitTime = 10  -- 10 seconds for items to arrive
+    -- Quick verification that items arrived (Jobs Computer should guarantee this now)
+    print("\nVerifying item arrival...")
+    sleep(0.5)  -- Small delay for any network latency
     
-    local lastStatus = ""
-    while os.clock() - waitStart < maxWaitTime do
-        -- Check current inventory by selecting each slot
-        local currentInventory = {}
-        local debugSlots = "Slot contents: "
+    local currentInventory = {}
+    for slot = 1, 16 do
+        turtle.select(slot)
+        local item = turtle.getItemDetail()
+        if item then
+            currentInventory[item.name] = (currentInventory[item.name] or 0) + item.count
+        end
+    end
+    
+    -- Check if we have all required items
+    local allItemsPresent = true
+    local status = "Inventory status:"
+    for itemName, neededCount in pairs(itemsNeeded) do
+        local haveCount = currentInventory[itemName] or 0
+        if haveCount >= neededCount then
+            status = status .. "\n  [OK] " .. itemName .. ": " .. haveCount .. "/" .. neededCount
+        else
+            status = status .. "\n  [X] " .. itemName .. ": " .. haveCount .. "/" .. neededCount .. " - MISSING!"
+            allItemsPresent = false
+        end
+    end
+    print(status)
+    
+    if not allItemsPresent then
+        -- If items are missing, give it one more second and check again
+        print("\nItems missing, checking once more...")
+        sleep(1)
+        
+        currentInventory = {}
         for slot = 1, 16 do
             turtle.select(slot)
-            local item = turtle.getItemDetail()  -- Get details of selected slot
+            local item = turtle.getItemDetail()
             if item then
                 currentInventory[item.name] = (currentInventory[item.name] or 0) + item.count
-                debugSlots = debugSlots .. "[" .. slot .. ":" .. item.name .. "x" .. item.count .. "] "
             end
         end
         
-        -- Check if we have all required items
-        local allItemsPresent = true
-        local status = "Current inventory:"
+        -- Show updated status
+        print("\nUpdated inventory status:")
         for itemName, neededCount in pairs(itemsNeeded) do
             local haveCount = currentInventory[itemName] or 0
-            status = status .. "\n  " .. itemName .. ": " .. haveCount .. "/" .. neededCount
-            if haveCount < neededCount then
-                allItemsPresent = false
+            if haveCount >= neededCount then
+                print("  [OK] " .. itemName .. ": " .. haveCount .. "/" .. neededCount)
+            else
+                print("  [X] " .. itemName .. ": " .. haveCount .. "/" .. neededCount .. " - STILL MISSING!")
             end
         end
-        
-        if allItemsPresent then
-            print(status)
-            print(debugSlots)
-            print("\nAll items have arrived!")
-            break
-        end
-        
-        -- Show progress every second (but only if status changed or first time)
-        local elapsed = math.floor(os.clock() - waitStart)
-        if status ~= lastStatus or elapsed == 0 then
-            print(status .. " (elapsed: " .. elapsed .. "s)")
-            print(debugSlots)
-            lastStatus = status
-        end
-        
-        sleep(0.1)
     end
     
     -- Final inventory check and display
@@ -350,6 +356,8 @@ function crafting_v2.craft(recipe, quantity)
     print("Crafting " .. batches .. " batch(es)...")
     
     for batch = 1, batches do
+        print("\n=== Batch " .. batch .. " of " .. batches .. " ===")
+        
         -- Arrange the grid
         local success, err = crafting_v2.arrangeCraftingGrid(recipe)
         if not success then
@@ -472,25 +480,25 @@ function crafting_v2.performCraft(network, jobsComputerID, recipeName, quantity)
     end
     
     -- Step 1: Clear inventory
+    print("\n--- Step 1: Clearing Inventory ---")
     crafting_v2.clearInventory(network, jobsComputerID)
     
     -- Step 2: Request items
+    print("\n--- Step 2: Requesting Items ---")
     local received, err = crafting_v2.requestItems(network, jobsComputerID, needed)
     if not received then
-        return false, err
+        return false, "Item request failed: " .. err
     end
     
     -- Step 3: Craft
+    print("\n--- Step 3: Crafting ---")
     local crafted, err = crafting_v2.craft(recipe, quantity)
     if crafted == 0 then
-        return false, err
+        return false, "Crafting failed: " .. (err or "Unknown error")
     end
     
-    -- Give a moment for items to settle
-    sleep(0.5)
-    
     -- Step 4: Return everything to ME
-    print("\nReturning all items to ME system...")
+    print("\n--- Step 4: Returning Items to ME ---")
     local returned = crafting_v2.returnItems(network, jobsComputerID)
     
     print("\n=== Craft Job Complete ===")
