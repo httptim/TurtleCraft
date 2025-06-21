@@ -1,7 +1,7 @@
 -- Turtle client for TurtleCraft
 -- Handles crafting operations and communication
 
-local network = require("lib.network")
+local network = require("lib/network")
 
 local COMPUTER_TYPE = "turtle"
 local turtleName = "Turtle_" .. os.getComputerID()
@@ -151,6 +151,7 @@ local function main()
                 end
                 break
             end
+        end
         end
     end
 end
