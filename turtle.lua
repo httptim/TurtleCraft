@@ -106,82 +106,112 @@ end
 
 -- Arrange items for crafting
 local function arrangeItemsForCrafting(recipe)
-    -- In CC:Tweaked turtle, crafting grid is slots 1-3, 5-7, 9-11
-    -- Slot 4 is skipped (would be output in crafting table)
-    -- Storage slots are 12-16
-    local craftingSlots = {1, 2, 3, 5, 6, 7, 9, 10, 11}
+    -- IMPORTANT: Turtle can only craft if it has EXACTLY the recipe items, nothing extra!
+    -- First, we need to temporarily store ALL items
     
-    -- First, move any items in crafting slots to storage slots
-    for _, slot in ipairs(craftingSlots) do
-        if turtle.getItemCount(slot) > 0 then
-            turtle.select(slot)
-            for storageSlot = 12, 16 do
-                if turtle.transferTo(storageSlot) then
-                    break
-                end
+    -- Count required items
+    local requiredItems = {}
+    for row = 1, 3 do
+        for col = 1, 3 do
+            local item = recipe.pattern[row][col]
+            if item then
+                requiredItems[item] = (requiredItems[item] or 0) + 1
             end
         end
     end
     
-    -- Map recipe pattern positions to turtle inventory slots
-    -- Recipe pattern: row 1-3, col 1-3
-    -- Turtle slots: 1  2  3
-    --               5  6  7  
-    --               9 10 11
+    -- Store all current items and their locations
+    local inventory = {}
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item then
+            if not inventory[item.name] then
+                inventory[item.name] = {}
+            end
+            table.insert(inventory[item.name], {slot = slot, count = item.count})
+        end
+    end
+    
+    -- Check if we have required items
+    for itemName, requiredCount in pairs(requiredItems) do
+        local available = 0
+        if inventory[itemName] then
+            for _, info in ipairs(inventory[itemName]) do
+                available = available + info.count
+            end
+        end
+        if available < requiredCount then
+            return false, "Need " .. requiredCount .. " " .. itemName .. ", have " .. available
+        end
+    end
+    
+    -- Clear ALL slots first by dropping extra items
+    -- We'll pick them up after crafting
+    print("Dropping extra items...")
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item then
+            local isRequired = requiredItems[item.name] and requiredItems[item.name] > 0
+            if not isRequired then
+                -- Drop items we don't need for this recipe
+                turtle.select(slot)
+                turtle.drop()  -- Drop in front
+            end
+        end
+    end
+    
+    -- Now arrange ONLY the required items in the crafting grid
+    -- Crafting grid slots: 1-3, 5-7, 9-11
     local slotMap = {
-        [1] = {1, 1}, [2] = {1, 2}, [3] = {1, 3},
-        [5] = {2, 1}, [6] = {2, 2}, [7] = {2, 3},
-        [9] = {3, 1}, [10] = {3, 2}, [11] = {3, 3}
+        {slot = 1, row = 1, col = 1}, {slot = 2, row = 1, col = 2}, {slot = 3, row = 1, col = 3},
+        {slot = 5, row = 2, col = 1}, {slot = 6, row = 2, col = 2}, {slot = 7, row = 2, col = 3},
+        {slot = 9, row = 3, col = 1}, {slot = 10, row = 3, col = 2}, {slot = 11, row = 3, col = 3}
     }
     
-    -- Place items according to recipe
-    for slot, pos in pairs(slotMap) do
-        local row, col = pos[1], pos[2]
-        local requiredItem = recipe.pattern[row][col]
-        
+    -- Place items in correct positions
+    local itemsPlaced = {}
+    for _, mapping in ipairs(slotMap) do
+        local requiredItem = recipe.pattern[mapping.row][mapping.col]
         if requiredItem then
-            -- Find the item in inventory (only check storage slots)
-            local sourceSlot = nil
-            for checkSlot = 12, 16 do
-                local item = turtle.getItemDetail(checkSlot)
-                if item and item.name == requiredItem then
-                    sourceSlot = checkSlot
-                    break
+            -- Find the item and move exactly 1 to the correct slot
+            local placed = false
+            for slot = 1, 16 do
+                if not placed then
+                    local item = turtle.getItemDetail(slot)
+                    if item and item.name == requiredItem and (not itemsPlaced[requiredItem] or itemsPlaced[requiredItem] < requiredItems[requiredItem]) then
+                        turtle.select(slot)
+                        if slot ~= mapping.slot then
+                            turtle.transferTo(mapping.slot, 1)
+                        elseif item.count > 1 then
+                            -- If item is already in correct slot but has more than 1, move extras
+                            turtle.transferTo(16, item.count - 1)
+                        end
+                        itemsPlaced[requiredItem] = (itemsPlaced[requiredItem] or 0) + 1
+                        placed = true
+                    end
                 end
             end
             
-            if sourceSlot then
-                turtle.select(sourceSlot)
-                turtle.transferTo(slot, 1)  -- Transfer 1 item
-            else
-                -- Check slot 4, 8 (non-crafting slots that might have items)
-                for _, checkSlot in ipairs({4, 8}) do
-                    local item = turtle.getItemDetail(checkSlot)
-                    if item and item.name == requiredItem then
-                        turtle.select(checkSlot)
-                        turtle.transferTo(slot, 1)
-                        sourceSlot = checkSlot
-                        break
-                    end
-                end
-                
-                if not sourceSlot then
-                    return false, "Missing item: " .. requiredItem
-                end
+            if not placed then
+                return false, "Failed to place " .. requiredItem
             end
         end
     end
     
-    -- Verify we have all required items placed
-    for slot, pos in pairs(slotMap) do
-        local row, col = pos[1], pos[2]
-        local requiredItem = recipe.pattern[row][col]
-        
-        if requiredItem then
-            local item = turtle.getItemDetail(slot)
-            if not item or item.name ~= requiredItem then
-                return false, "Failed to place " .. requiredItem .. " in slot " .. slot
+    -- Drop any remaining items that aren't in the crafting grid
+    for slot = 1, 16 do
+        -- Skip crafting grid slots
+        local isCraftingSlot = false
+        for _, mapping in ipairs(slotMap) do
+            if mapping.slot == slot then
+                isCraftingSlot = true
+                break
             end
+        end
+        
+        if not isCraftingSlot and turtle.getItemCount(slot) > 0 then
+            turtle.select(slot)
+            turtle.drop()
         end
     end
     
@@ -219,11 +249,30 @@ local function executeCraft(recipeName)
         return false, err
     end
     
-    -- Make sure we have an empty slot selected (not in crafting grid)
-    turtle.select(16)
+    -- Find an empty slot for output (prefer slot 4, then 8, then 12-16)
+    local outputSlot = nil
+    for _, slot in ipairs({4, 8, 12, 13, 14, 15, 16}) do
+        if turtle.getItemCount(slot) == 0 then
+            outputSlot = slot
+            break
+        end
+    end
+    
+    if not outputSlot then
+        status = "idle"
+        return false, "No empty slot for crafting output"
+    end
+    
+    -- Select the output slot
+    turtle.select(outputSlot)
+    print("Output slot: " .. outputSlot)
     
     -- Craft the item
     local craftSuccess = turtle.craft()
+    
+    -- Pick up dropped items regardless of success
+    print("Picking up dropped items...")
+    turtle.suck()  -- Pick up items in front
     
     status = "idle"
     
@@ -235,7 +284,7 @@ local function executeCraft(recipeName)
         for _, slot in ipairs({1, 2, 3, 5, 6, 7, 9, 10, 11}) do
             local item = turtle.getItemDetail(slot)
             if item then
-                print("Slot " .. slot .. ": " .. item.name)
+                print("Slot " .. slot .. ": " .. item.name .. " x" .. item.count)
             else
                 print("Slot " .. slot .. ": empty")
             end
