@@ -99,15 +99,16 @@ end
 
 -- Arrange items for crafting
 local function arrangeItemsForCrafting(recipe)
-    -- In CC:Tweaked, crafting grid is slots 1-9 (3x3 grid)
-    -- Storage slots are 10-16
-    local craftingSlots = {1, 2, 3, 4, 5, 6, 7, 8, 9}
+    -- In CC:Tweaked turtle, crafting grid is slots 1-3, 5-7, 9-11
+    -- Slot 4 is skipped (would be output in crafting table)
+    -- Storage slots are 12-16
+    local craftingSlots = {1, 2, 3, 5, 6, 7, 9, 10, 11}
     
     -- First, move any items in crafting slots to storage slots
     for _, slot in ipairs(craftingSlots) do
         if turtle.getItemCount(slot) > 0 then
             turtle.select(slot)
-            for storageSlot = 10, 16 do
+            for storageSlot = 12, 16 do
                 if turtle.transferTo(storageSlot) then
                     break
                 end
@@ -117,24 +118,24 @@ local function arrangeItemsForCrafting(recipe)
     
     -- Map recipe pattern positions to turtle inventory slots
     -- Recipe pattern: row 1-3, col 1-3
-    -- Turtle slots: 1 2 3
-    --               4 5 6  
-    --               7 8 9
+    -- Turtle slots: 1  2  3
+    --               5  6  7  
+    --               9 10 11
     local slotMap = {
         [1] = {1, 1}, [2] = {1, 2}, [3] = {1, 3},
-        [4] = {2, 1}, [5] = {2, 2}, [6] = {2, 3},
-        [7] = {3, 1}, [8] = {3, 2}, [9] = {3, 3}
+        [5] = {2, 1}, [6] = {2, 2}, [7] = {2, 3},
+        [9] = {3, 1}, [10] = {3, 2}, [11] = {3, 3}
     }
     
     -- Place items according to recipe
-    for slot = 1, 9 do
-        local row, col = slotMap[slot][1], slotMap[slot][2]
+    for slot, pos in pairs(slotMap) do
+        local row, col = pos[1], pos[2]
         local requiredItem = recipe.pattern[row][col]
         
         if requiredItem then
             -- Find the item in inventory (only check storage slots)
             local sourceSlot = nil
-            for checkSlot = 10, 16 do
+            for checkSlot = 12, 16 do
                 local item = turtle.getItemDetail(checkSlot)
                 if item and item.name == requiredItem then
                     sourceSlot = checkSlot
@@ -146,22 +147,27 @@ local function arrangeItemsForCrafting(recipe)
                 turtle.select(sourceSlot)
                 turtle.transferTo(slot, 1)  -- Transfer 1 item
             else
-                -- Try to find in crafting slots that we haven't used yet
-                for checkSlot = slot + 1, 9 do
+                -- Check slot 4, 8 (non-crafting slots that might have items)
+                for _, checkSlot in ipairs({4, 8}) do
                     local item = turtle.getItemDetail(checkSlot)
                     if item and item.name == requiredItem then
                         turtle.select(checkSlot)
                         turtle.transferTo(slot, 1)
+                        sourceSlot = checkSlot
                         break
                     end
+                end
+                
+                if not sourceSlot then
+                    return false, "Missing item: " .. requiredItem
                 end
             end
         end
     end
     
     -- Verify we have all required items placed
-    for slot = 1, 9 do
-        local row, col = slotMap[slot][1], slotMap[slot][2]
+    for slot, pos in pairs(slotMap) do
+        local row, col = pos[1], pos[2]
         local requiredItem = recipe.pattern[row][col]
         
         if requiredItem then
@@ -206,8 +212,8 @@ local function executeCraft(recipeName)
         return false, err
     end
     
-    -- Select slot 16 (output slot) before crafting
-    turtle.select(16)
+    -- Select slot 4 (crafting output slot) before crafting
+    turtle.select(4)
     
     -- Craft the item
     local craftSuccess = turtle.craft()
@@ -219,10 +225,12 @@ local function executeCraft(recipeName)
     else
         -- Debug: Show current inventory arrangement
         print("Current crafting grid:")
-        for slot = 1, 9 do
+        for _, slot in ipairs({1, 2, 3, 5, 6, 7, 9, 10, 11}) do
             local item = turtle.getItemDetail(slot)
             if item then
                 print("Slot " .. slot .. ": " .. item.name)
+            else
+                print("Slot " .. slot .. ": empty")
             end
         end
         return false, "Crafting failed - check recipe arrangement"
