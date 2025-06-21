@@ -135,6 +135,7 @@ local function main()
                         itemCount = getInventoryCount()
                     })
                 end
+                end
             end
         elseif event == "timer" and p1 == heartbeatTimer then
             -- Send heartbeat
