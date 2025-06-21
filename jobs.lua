@@ -6,6 +6,7 @@ local network = require("lib.network")
 local COMPUTER_TYPE = "jobs"
 local turtles = {}
 local meBridge = nil
+local craftRequests = {}  -- Track active craft requests
 
 -- Find ME Bridge peripheral
 local function findMEBridge()
@@ -70,6 +71,82 @@ local function handleHeartbeat(senderId, message)
     end
 end
 
+-- Find an available turtle
+local function findAvailableTurtle()
+    for id, turtle in pairs(turtles) do
+        if turtle.status == "idle" then
+            -- Check if turtle is still responsive
+            local timeSinceLastSeen = os.time() - turtle.lastSeen
+            if timeSinceLastSeen < 30 then  -- 30 second timeout
+                return id, turtle
+            end
+        end
+    end
+    return nil
+end
+
+-- Handle craft request from Main Computer
+local function handleCraftRequest(senderId, message)
+    if message.type == "craft_request" then
+        local requestId = os.time() .. "_" .. senderId
+        local recipe = message.data.recipe
+        
+        print("Craft request from Main Computer: " .. recipe)
+        
+        -- Find available turtle
+        local turtleId = findAvailableTurtle()
+        if not turtleId then
+            network.send(senderId, "craft_response", {
+                success = false,
+                message = "No available turtles",
+                recipe = recipe,
+                requestId = requestId
+            })
+            return
+        end
+        
+        -- Store request info
+        craftRequests[requestId] = {
+            mainComputerId = senderId,
+            turtleId = turtleId,
+            recipe = recipe,
+            timestamp = os.time()
+        }
+        
+        -- Forward to turtle
+        turtles[turtleId].status = "crafting"
+        network.send(turtleId, "craft_request", {
+            recipe = recipe,
+            requestId = requestId
+        })
+        
+        print("Forwarded to Turtle " .. turtleId)
+    end
+end
+
+-- Handle craft response from turtle
+local function handleCraftResponse(senderId, message)
+    if message.type == "craft_response" then
+        local requestId = message.data.requestId
+        local request = craftRequests[requestId]
+        
+        if request then
+            -- Update turtle status
+            if turtles[senderId] then
+                turtles[senderId].status = "idle"
+            end
+            
+            -- Forward response to Main Computer
+            network.send(request.mainComputerId, "craft_response", message.data)
+            
+            -- Clean up request
+            craftRequests[requestId] = nil
+            
+            print("Craft " .. (message.data.success and "succeeded" or "failed") .. ": " .. message.data.message)
+        end
+    end
+end
+
 -- Main program
 local function main()
     term.clear()
@@ -115,11 +192,21 @@ local function main()
                 
                 -- Handle status request
                 if message.type == "status_request" then
+                    -- Count turtles (can't use # on non-array table)
+                    local turtleCount = 0
+                    for _ in pairs(turtles) do
+                        turtleCount = turtleCount + 1
+                    end
+                    
                     network.send(senderId, "status_response", {
-                        turtleCount = #turtles,
+                        turtleCount = turtleCount,
                         hasMEBridge = meBridge ~= nil
                     })
                 end
+                
+                -- Handle craft requests and responses
+                handleCraftRequest(senderId, message)
+                handleCraftResponse(senderId, message)
             end
         elseif event == "timer" and p1 == discoveryTimer then
             -- Periodic turtle discovery

@@ -2,6 +2,7 @@
 -- User interface for the crafting system
 
 local network = require("lib.network")
+local recipes = require("recipes")
 
 local COMPUTER_TYPE = "main"
 local jobsComputerId = nil
@@ -58,6 +59,7 @@ local function displayMenu()
     
     print("\n--- Menu ---")
     print("[S] System Status")
+    print("[C] Craft Item")
     print("[R] Reconnect to Jobs Computer")
     print("[Q] Quit")
     print("\nChoice: ")
@@ -76,6 +78,76 @@ local function showSystemStatus()
         print("  ME Bridge: " .. (status.hasMEBridge and "Connected" or "Not found"))
     else
         printError("\n[X] Failed to get status from Jobs Computer")
+    end
+    
+    print("\nPress any key to continue...")
+    os.pullEvent("key")
+end
+
+-- Show crafting menu
+local function showCraftingMenu()
+    term.clear()
+    term.setCursorPos(1, 1)
+    print("=== Crafting Menu ===")
+    
+    if not jobsComputerId then
+        printError("\n[X] Not connected to Jobs Computer")
+        print("\nPress any key to continue...")
+        os.pullEvent("key")
+        return
+    end
+    
+    -- Get available recipes
+    local recipeNames = recipes.getAllRecipeNames()
+    
+    print("\nAvailable Recipes:")
+    for i, name in ipairs(recipeNames) do
+        print(string.format("[%d] %s", i, name))
+    end
+    
+    print("\n[0] Cancel")
+    print("\nSelect recipe: ")
+    
+    -- Get user selection
+    local input = read()
+    local choice = tonumber(input)
+    
+    if not choice or choice == 0 then
+        return
+    end
+    
+    if choice < 1 or choice > #recipeNames then
+        printError("Invalid selection")
+        sleep(1)
+        return
+    end
+    
+    local recipeName = recipeNames[choice]
+    
+    -- Send craft request
+    print("\nSending craft request for: " .. recipeName)
+    local success = network.send(jobsComputerId, "craft_request", {
+        recipe = recipeName
+    })
+    
+    if not success then
+        printError("[X] Failed to send craft request")
+        sleep(2)
+        return
+    end
+    
+    -- Wait for response
+    print("Waiting for response...")
+    local senderId, response = network.receive(10)
+    
+    if senderId == jobsComputerId and response and response.type == "craft_response" then
+        if response.data.success then
+            print("[OK] " .. response.data.message)
+        else
+            printError("[X] " .. response.data.message)
+        end
+    else
+        printError("[X] No response from Jobs Computer")
     end
     
     print("\nPress any key to continue...")
@@ -101,6 +173,8 @@ local function main()
         
         if key == keys.s then
             showSystemStatus()
+        elseif key == keys.c then
+            showCraftingMenu()
         elseif key == keys.r then
             term.clear()
             term.setCursorPos(1, 1)

@@ -1,7 +1,8 @@
 -- Turtle client for TurtleCraft
 -- Handles crafting operations and communication
 
-local network = require("lib/network")
+local network = require("lib.network")
+local recipes = require("recipes")
 
 local COMPUTER_TYPE = "turtle"
 local turtleName = "Turtle_" .. os.getComputerID()
@@ -71,6 +72,102 @@ local function getInventoryCount()
         end
     end
     return count
+end
+
+-- Get inventory details
+local function getInventory()
+    local inventory = {}
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item then
+            inventory[slot] = item
+        end
+    end
+    return inventory
+end
+
+-- Find item in inventory
+local function findItem(itemName)
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item and item.name == itemName then
+            return slot, item.count
+        end
+    end
+    return nil, 0
+end
+
+-- Arrange items for crafting
+local function arrangeItemsForCrafting(recipe)
+    -- Clear crafting grid (slots 1-3, 5-7, 9-11 in turtle)
+    local craftingSlots = {1, 2, 3, 5, 6, 7, 9, 10, 11}
+    
+    -- First, move any items in crafting slots to storage slots (12-16)
+    for _, slot in ipairs(craftingSlots) do
+        if turtle.getItemCount(slot) > 0 then
+            turtle.select(slot)
+            for storageSlot = 12, 16 do
+                if turtle.transferTo(storageSlot) then
+                    break
+                end
+            end
+        end
+    end
+    
+    -- Now arrange items according to recipe pattern
+    local slotMap = {
+        [1] = {1, 1}, [2] = {1, 2}, [3] = {1, 3},
+        [5] = {2, 1}, [6] = {2, 2}, [7] = {2, 3},
+        [9] = {3, 1}, [10] = {3, 2}, [11] = {3, 3}
+    }
+    
+    for slot, pos in pairs(slotMap) do
+        local row, col = pos[1], pos[2]
+        local requiredItem = recipe.pattern[row][col]
+        
+        if requiredItem then
+            -- Find the item in inventory
+            local sourceSlot = findItem(requiredItem)
+            if sourceSlot then
+                turtle.select(sourceSlot)
+                turtle.transferTo(slot, 1)  -- Transfer 1 item
+            else
+                return false, "Missing item: " .. requiredItem
+            end
+        end
+    end
+    
+    return true
+end
+
+-- Execute crafting
+local function executeCraft(recipeName)
+    local recipe = recipes.getRecipe(recipeName)
+    if not recipe then
+        return false, "Recipe not found: " .. recipeName
+    end
+    
+    -- Update status
+    status = "crafting"
+    
+    -- Arrange items
+    local success, err = arrangeItemsForCrafting(recipe)
+    if not success then
+        status = "idle"
+        return false, err
+    end
+    
+    -- Craft the item
+    turtle.select(1)  -- Select first slot for crafting
+    local craftSuccess = turtle.craft()
+    
+    status = "idle"
+    
+    if craftSuccess then
+        return true, "Crafted " .. recipe.count .. "x " .. recipe.result
+    else
+        return false, "Crafting failed - check recipe arrangement"
+    end
 end
 
 -- Main program
@@ -145,6 +242,22 @@ local function main()
                         fuelLevel = turtle.getFuelLevel(),
                         itemCount = getInventoryCount()
                     })
+                elseif message.type == "craft_request" then
+                    print("Received craft request: " .. (message.data.recipe or "unknown"))
+                    local success, result = executeCraft(message.data.recipe)
+                    
+                    network.send(senderId, "craft_response", {
+                        success = success,
+                        message = result,
+                        recipe = message.data.recipe,
+                        requestId = message.data.requestId
+                    })
+                    
+                    if success then
+                        print("[OK] " .. result)
+                    else
+                        print("[X] " .. result)
+                    end
                 end
             end
         elseif event == "timer" and p1 == heartbeatTimer then

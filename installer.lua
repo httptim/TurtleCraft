@@ -16,6 +16,9 @@ local FILES = {
     
     -- Libraries
     {url = "lib/network.lua", path = "lib/network.lua"},
+    
+    -- Data files
+    {url = "recipes.lua", path = "recipes.lua"},
 }
 
 -- Directories to create  
