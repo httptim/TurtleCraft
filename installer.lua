@@ -395,39 +395,6 @@ local function install()
         end
     end
     
-    addScrollLine("", colors.white)
-    addScrollLine("+ Installation complete!", colors.lime)
-    addScrollLine("", colors.white)
-    addScrollLine("To start the system:", colors.yellow)
-    addScrollLine("  1. Jobs Computer: Run 'start-jobs' or 'startup'", colors.white)
-    addScrollLine("  2. Turtles: Run 'start-turtle' or 'startup'", colors.white)
-    addScrollLine("", colors.white)
-    addScrollLine("Setup Requirements:", colors.cyan)
-    addScrollLine("  - Jobs Computer: ME Bridge attached (any side)", colors.white)
-    addScrollLine("  - Turtles: Connect to same wired network", colors.white)
-    addScrollLine("  - Both: Need wireless modems for rednet", colors.white)
-    
-    sleep(2)
-    
-    -- Show computer type selection
-    local _, termHeight = term.getSize()
-    term.setCursorPos(1, termHeight - 2)
-    term.setTextColor(colors.yellow)
-    print("Select computer type to start:")
-    print("1) Jobs Computer  2) Turtle  3) Exit")
-    write("Choice (1-3): ")
-    local answer = read()
-    
-    if answer == "1" then
-        term.clear()
-        term.setCursorPos(1, 1)
-        shell.run("start-jobs")
-    elseif answer == "2" then
-        term.clear()
-        term.setCursorPos(1, 1)
-        shell.run("start-turtle")
-    end
-    
     return true
 end
 
