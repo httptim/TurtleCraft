@@ -40,8 +40,10 @@ function network.initialize(computerType)
     end
     
     -- Register this computer with rednet hosting
-    -- The hostname is what rednet.lookup will search for
-    rednet.host(PROTOCOL, computerType)
+    -- Each computer needs a unique hostname
+    local hostname = computerType .. "_" .. os.getComputerID()
+    rednet.host(PROTOCOL, hostname)
+    print("[OK] Registered as: " .. hostname)
     
     return success
 end
@@ -104,28 +106,35 @@ end
 function network.discover(computerType, timeout)
     timeout = timeout or 2
     
-    -- Use rednet.lookup to find computers hosting the protocol
-    local results = {rednet.lookup(PROTOCOL, computerType)}
+    -- Use rednet.lookup to find ALL computers hosting our protocol
+    local results = {rednet.lookup(PROTOCOL)}
+    
+    print("Found " .. #results .. " computers on network")
     
     local computers = {}
     for _, id in ipairs(results) do
-        -- Get more info about each computer
-        network.send(id, "info_request", {})
-        local senderId, response = network.receive(timeout)
-        
-        if senderId == id and response and response.type == "info_response" then
-            table.insert(computers, {
-                id = id,
-                type = computerType,
-                name = response.data.name or (computerType .. "_" .. id)
-            })
+        print("  Checking computer ID: " .. id)
+        -- Get more info about each computer to check its type
+        local sent = network.send(id, "info_request", {}, 1)
+        if sent then
+            local senderId, response = network.receive(1)
+            
+            if senderId == id and response and response.type == "info_response" then
+                print("    Type: " .. (response.data.type or "unknown"))
+                -- Check if this is the type we're looking for
+                if response.data.type == computerType then
+                    table.insert(computers, {
+                        id = id,
+                        type = response.data.type,
+                        name = response.data.name or (computerType .. "_" .. id)
+                    })
+                    print("    [OK] Added to results")
+                end
+            else
+                print("    [!] No response")
+            end
         else
-            -- Fallback if no response
-            table.insert(computers, {
-                id = id,
-                type = computerType,
-                name = computerType .. "_" .. id
-            })
+            print("    [!] Failed to send info request")
         end
     end
     
