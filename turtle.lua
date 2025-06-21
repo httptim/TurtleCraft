@@ -55,10 +55,17 @@ end
 -- Send heartbeat to Jobs Computer
 local function sendHeartbeat()
     if jobsComputerId then
-        network.send(jobsComputerId, "heartbeat", {
-            status = status,
-            fuelLevel = turtle.getFuelLevel()
-        })
+        -- Send heartbeat directly without waiting for ACK
+        local message = {
+            type = "heartbeat",
+            data = {
+                status = status,
+                fuelLevel = turtle.getFuelLevel()
+            },
+            sender = os.getComputerID(),
+            timestamp = os.time()
+        }
+        rednet.send(jobsComputerId, message, "crafting_system")
     end
 end
 
@@ -212,8 +219,8 @@ local function executeCraft(recipeName)
         return false, err
     end
     
-    -- Select slot 4 (crafting output slot) before crafting
-    turtle.select(4)
+    -- Make sure we have an empty slot selected (not in crafting grid)
+    turtle.select(16)
     
     -- Craft the item
     local craftSuccess = turtle.craft()
@@ -298,17 +305,31 @@ local function main()
                 -- Handle commands from Jobs Computer (only if registered)
                 if senderId == jobsComputerId then
                     if message.type == "ping" then
-                        network.send(senderId, "pong", {
+                        -- Send pong directly
+                        local response = {
+                            type = "pong",
+                            data = {
+                                status = status,
+                                fuelLevel = turtle.getFuelLevel(),
+                                itemCount = getInventoryCount()
+                            },
+                            sender = os.getComputerID(),
+                            timestamp = os.time()
+                        }
+                        rednet.send(senderId, response, "crafting_system")
+                elseif message.type == "status_request" then
+                    -- Send status directly
+                    local response = {
+                        type = "status_response",
+                        data = {
                             status = status,
                             fuelLevel = turtle.getFuelLevel(),
                             itemCount = getInventoryCount()
-                        })
-                elseif message.type == "status_request" then
-                    network.send(senderId, "status_response", {
-                        status = status,
-                        fuelLevel = turtle.getFuelLevel(),
-                        itemCount = getInventoryCount()
-                    })
+                        },
+                        sender = os.getComputerID(),
+                        timestamp = os.time()
+                    }
+                    rednet.send(senderId, response, "crafting_system")
                 elseif message.type == "craft_request" then
                     print("Received craft request: " .. (message.data.recipe or "unknown"))
                     local success, result = executeCraft(message.data.recipe)
@@ -343,9 +364,16 @@ local function main()
             if key == keys.q then
                 print("\nShutting down...")
                 if jobsComputerId then
-                    network.send(jobsComputerId, "unregister", {
-                        reason = "shutdown"
-                    })
+                    -- Send unregister directly
+                    local message = {
+                        type = "unregister",
+                        data = {
+                            reason = "shutdown"
+                        },
+                        sender = os.getComputerID(),
+                        timestamp = os.time()
+                    }
+                    rednet.send(jobsComputerId, message, "crafting_system")
                 end
                 break
             end
