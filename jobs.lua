@@ -9,7 +9,7 @@ local meBridge = nil
 
 -- Find ME Bridge peripheral
 local function findMEBridge()
-    meBridge = peripheral.find("meBridge")
+    meBridge = peripheral.find("me_bridge")
     if meBridge then
         print("[OK] ME Bridge found")
         return true
