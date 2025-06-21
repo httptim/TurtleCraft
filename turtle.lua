@@ -99,14 +99,15 @@ end
 
 -- Arrange items for crafting
 local function arrangeItemsForCrafting(recipe)
-    -- Clear crafting grid (slots 1-3, 5-7, 9-11 in turtle)
-    local craftingSlots = {1, 2, 3, 5, 6, 7, 9, 10, 11}
+    -- In CC:Tweaked, crafting grid is slots 1-9 (3x3 grid)
+    -- Storage slots are 10-16
+    local craftingSlots = {1, 2, 3, 4, 5, 6, 7, 8, 9}
     
-    -- First, move any items in crafting slots to storage slots (12-16)
+    -- First, move any items in crafting slots to storage slots
     for _, slot in ipairs(craftingSlots) do
         if turtle.getItemCount(slot) > 0 then
             turtle.select(slot)
-            for storageSlot = 12, 16 do
+            for storageSlot = 10, 16 do
                 if turtle.transferTo(storageSlot) then
                     break
                 end
@@ -114,25 +115,59 @@ local function arrangeItemsForCrafting(recipe)
         end
     end
     
-    -- Now arrange items according to recipe pattern
+    -- Map recipe pattern positions to turtle inventory slots
+    -- Recipe pattern: row 1-3, col 1-3
+    -- Turtle slots: 1 2 3
+    --               4 5 6  
+    --               7 8 9
     local slotMap = {
         [1] = {1, 1}, [2] = {1, 2}, [3] = {1, 3},
-        [5] = {2, 1}, [6] = {2, 2}, [7] = {2, 3},
-        [9] = {3, 1}, [10] = {3, 2}, [11] = {3, 3}
+        [4] = {2, 1}, [5] = {2, 2}, [6] = {2, 3},
+        [7] = {3, 1}, [8] = {3, 2}, [9] = {3, 3}
     }
     
-    for slot, pos in pairs(slotMap) do
-        local row, col = pos[1], pos[2]
+    -- Place items according to recipe
+    for slot = 1, 9 do
+        local row, col = slotMap[slot][1], slotMap[slot][2]
         local requiredItem = recipe.pattern[row][col]
         
         if requiredItem then
-            -- Find the item in inventory
-            local sourceSlot = findItem(requiredItem)
+            -- Find the item in inventory (only check storage slots)
+            local sourceSlot = nil
+            for checkSlot = 10, 16 do
+                local item = turtle.getItemDetail(checkSlot)
+                if item and item.name == requiredItem then
+                    sourceSlot = checkSlot
+                    break
+                end
+            end
+            
             if sourceSlot then
                 turtle.select(sourceSlot)
                 turtle.transferTo(slot, 1)  -- Transfer 1 item
             else
-                return false, "Missing item: " .. requiredItem
+                -- Try to find in crafting slots that we haven't used yet
+                for checkSlot = slot + 1, 9 do
+                    local item = turtle.getItemDetail(checkSlot)
+                    if item and item.name == requiredItem then
+                        turtle.select(checkSlot)
+                        turtle.transferTo(slot, 1)
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Verify we have all required items placed
+    for slot = 1, 9 do
+        local row, col = slotMap[slot][1], slotMap[slot][2]
+        local requiredItem = recipe.pattern[row][col]
+        
+        if requiredItem then
+            local item = turtle.getItemDetail(slot)
+            if not item or item.name ~= requiredItem then
+                return false, "Failed to place " .. requiredItem .. " in slot " .. slot
             end
         end
     end
@@ -150,6 +185,20 @@ local function executeCraft(recipeName)
     -- Update status
     status = "crafting"
     
+    -- Debug: Print recipe pattern
+    print("Recipe pattern for " .. recipeName .. ":")
+    for row = 1, 3 do
+        local rowStr = ""
+        for col = 1, 3 do
+            if recipe.pattern[row][col] then
+                rowStr = rowStr .. "[X]"
+            else
+                rowStr = rowStr .. "[ ]"
+            end
+        end
+        print(rowStr)
+    end
+    
     -- Arrange items
     local success, err = arrangeItemsForCrafting(recipe)
     if not success then
@@ -157,8 +206,10 @@ local function executeCraft(recipeName)
         return false, err
     end
     
+    -- Select slot 16 (output slot) before crafting
+    turtle.select(16)
+    
     -- Craft the item
-    turtle.select(1)  -- Select first slot for crafting
     local craftSuccess = turtle.craft()
     
     status = "idle"
@@ -166,6 +217,14 @@ local function executeCraft(recipeName)
     if craftSuccess then
         return true, "Crafted " .. recipe.count .. "x " .. recipe.result
     else
+        -- Debug: Show current inventory arrangement
+        print("Current crafting grid:")
+        for slot = 1, 9 do
+            local item = turtle.getItemDetail(slot)
+            if item then
+                print("Slot " .. slot .. ": " .. item.name)
+            end
+        end
         return false, "Crafting failed - check recipe arrangement"
     end
 end
@@ -246,12 +305,19 @@ local function main()
                     print("Received craft request: " .. (message.data.recipe or "unknown"))
                     local success, result = executeCraft(message.data.recipe)
                     
-                    network.send(senderId, "craft_response", {
-                        success = success,
-                        message = result,
-                        recipe = message.data.recipe,
-                        requestId = message.data.requestId
-                    })
+                    -- Send response directly without waiting for ACK
+                    local response = {
+                        type = "craft_response",
+                        data = {
+                            success = success,
+                            message = result,
+                            recipe = message.data.recipe,
+                            requestId = message.data.requestId
+                        },
+                        sender = os.getComputerID(),
+                        timestamp = os.time()
+                    }
+                    rednet.send(senderId, response, "crafting_system")
                     
                     if success then
                         print("[OK] " .. result)

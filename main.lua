@@ -124,17 +124,17 @@ local function showCraftingMenu()
     
     local recipeName = recipeNames[choice]
     
-    -- Send craft request
+    -- Send craft request directly
     print("\nSending craft request for: " .. recipeName)
-    local success = network.send(jobsComputerId, "craft_request", {
-        recipe = recipeName
-    })
-    
-    if not success then
-        printError("[X] Failed to send craft request")
-        sleep(2)
-        return
-    end
+    local message = {
+        type = "craft_request",
+        data = {
+            recipe = recipeName
+        },
+        sender = os.getComputerID(),
+        timestamp = os.time()
+    }
+    rednet.send(jobsComputerId, message, "crafting_system")
     
     -- Wait for response
     print("Waiting for response...")
