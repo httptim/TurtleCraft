@@ -106,49 +106,62 @@ end
 function network.discover(computerType, timeout)
     timeout = timeout or 2
     
-    -- Use rednet.lookup to find ALL computers hosting our protocol
-    local results = {rednet.lookup(PROTOCOL)}
+    -- Broadcast a discovery request
+    print("Broadcasting discovery request for: " .. computerType)
+    local message = {
+        type = "discover",
+        data = {requestedType = computerType},
+        sender = os.getComputerID(),
+        timestamp = os.time()
+    }
+    rednet.broadcast(message, PROTOCOL)
     
-    print("Found " .. #results .. " computers on network")
-    
+    -- Collect responses
     local computers = {}
-    for _, id in ipairs(results) do
-        print("  Checking computer ID: " .. id)
-        -- Get more info about each computer to check its type
-        local sent = network.send(id, "info_request", {}, 1)
-        if sent then
-            local senderId, response = network.receive(1)
-            
-            if senderId == id and response and response.type == "info_response" then
-                print("    Type: " .. (response.data.type or "unknown"))
-                -- Check if this is the type we're looking for
-                if response.data.type == computerType then
+    local timer = os.startTimer(timeout)
+    
+    while true do
+        local event, p1, p2, p3 = os.pullEvent()
+        
+        if event == "timer" and p1 == timer then
+            break
+        elseif event == "rednet_message" then
+            local senderId, msg, protocol = p1, p2, p3
+            if protocol == PROTOCOL and msg and type(msg) == "table" and msg.type == "discover_response" then
+                if msg.data.type == computerType then
                     table.insert(computers, {
-                        id = id,
-                        type = response.data.type,
-                        name = response.data.name or (computerType .. "_" .. id)
+                        id = senderId,
+                        type = msg.data.type,
+                        name = msg.data.name or (computerType .. "_" .. senderId)
                     })
-                    print("    [OK] Added to results")
+                    print("  Found " .. msg.data.type .. " computer ID: " .. senderId)
                 end
-            else
-                print("    [!] No response")
             end
-        else
-            print("    [!] Failed to send info request")
         end
     end
     
+    print("Discovery complete. Found " .. #computers .. " " .. computerType .. " computers")
     return computers
 end
 
--- Handle info requests for discovery
-function network.handleInfoRequest(computerType, computerName)
+-- Handle discovery requests
+function network.handleDiscovery(computerType, computerName)
     return function(senderId, message)
-        if message.type == "info_request" then
-            network.send(senderId, "info_response", {
-                type = computerType,
-                name = computerName or (computerType .. "_" .. os.getComputerID())
-            })
+        if message.type == "discover" then
+            -- Respond if they're looking for our type or any type
+            if not message.data.requestedType or message.data.requestedType == computerType then
+                local response = {
+                    type = "discover_response",
+                    data = {
+                        type = computerType,
+                        name = computerName or (computerType .. "_" .. os.getComputerID())
+                    },
+                    sender = os.getComputerID(),
+                    timestamp = os.time()
+                }
+                rednet.send(senderId, response, PROTOCOL)
+                print("Responded to discovery from computer " .. senderId)
+            end
         end
     end
 end

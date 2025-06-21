@@ -115,14 +115,15 @@ local function main()
         
         if event == "rednet_message" then
             local senderId, message = p1, p2
-            if message and type(message) == "table" and senderId == jobsComputerId then
-                -- Handle info requests
-                local infoHandler = network.handleInfoRequest(COMPUTER_TYPE, turtleName)
-                infoHandler(senderId, message)
+            if message and type(message) == "table" then
+                -- Always handle discovery requests
+                local discoveryHandler = network.handleDiscovery(COMPUTER_TYPE, turtleName)
+                discoveryHandler(senderId, message)
                 
-                -- Handle commands from Jobs Computer
-                if message.type == "ping" then
-                    network.send(senderId, "pong", {
+                -- Handle commands from Jobs Computer (only if registered)
+                if senderId == jobsComputerId then
+                    if message.type == "ping" then
+                        network.send(senderId, "pong", {
                         status = status,
                         fuelLevel = turtle.getFuelLevel(),
                         itemCount = getInventoryCount()

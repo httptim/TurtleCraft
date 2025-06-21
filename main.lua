@@ -120,9 +120,9 @@ local function handleNetworkMessages()
     while true do
         local senderId, message = network.receive()
         if message then
-            -- Handle info requests
-            local infoHandler = network.handleInfoRequest(COMPUTER_TYPE, "MainComputer")
-            infoHandler(senderId, message)
+            -- Handle discovery requests
+            local discoveryHandler = network.handleDiscovery(COMPUTER_TYPE, "MainComputer")
+            discoveryHandler(senderId, message)
         end
     end
 end
