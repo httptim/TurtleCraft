@@ -9,27 +9,33 @@ local INSTALL_DIR = ""  -- Install in root directory
 
 -- File manifest for CC:Tweaked Distributed Crafting System
 local FILES = {
-    -- Main programs (simplified system)
-    {url = "jobs_computer.lua", path = "jobs_computer.lua"},
+    -- Main programs
+    {url = "main.lua", path = "main.lua"},
+    {url = "jobs.lua", path = "jobs.lua"},
     {url = "turtle.lua", path = "turtle.lua"},
     
-    -- Startup script
-    {url = "startup.lua", path = "startup.lua"},
+    -- Libraries
+    {url = "lib/network.lua", path = "lib/network.lua"},
 }
 
 -- Directories to create  
-local DIRECTORIES = {}
+local DIRECTORIES = {"lib"}
 
 -- Launcher scripts
 local LAUNCHERS = {
     {
-        name = "start-jobs",
-        content = [[-- Jobs Computer Launcher
-shell.run("jobs_computer.lua")]]
+        name = "tc-main",
+        content = [[-- TurtleCraft Main Computer Launcher
+shell.run("main.lua")]]
     },
     {
-        name = "start-turtle",
-        content = [[-- Turtle Launcher
+        name = "tc-jobs",
+        content = [[-- TurtleCraft Jobs Computer Launcher
+shell.run("jobs.lua")]]
+    },
+    {
+        name = "tc-turtle",
+        content = [[-- TurtleCraft Turtle Launcher
 shell.run("turtle.lua")]]
     },
 }
