@@ -24,13 +24,24 @@ local function registerWithJobs()
     local jobs = jobsComputers[1]
     print("Found Jobs Computer ID: " .. jobs.id)
     
-    local success = network.send(jobs.id, "register", {
-        name = turtleName,
-        fuelLevel = turtle.getFuelLevel(),
-        hasWiredModem = peripheral.find("modem", function(name, m) return not m.isWireless() end) ~= nil
-    }, 10)
+    -- Send registration message directly without waiting for ack
+    local message = {
+        type = "register",
+        data = {
+            name = turtleName,
+            fuelLevel = turtle.getFuelLevel(),
+            hasWiredModem = peripheral.find("modem", function(name, m) return not m.isWireless() end) ~= nil
+        },
+        sender = os.getComputerID(),
+        timestamp = os.time()
+    }
     
-    if success then
+    rednet.send(jobs.id, message, "crafting_system")
+    
+    -- Wait for registration confirmation
+    local senderId, response = rednet.receive("crafting_system", 10)
+    
+    if senderId == jobs.id and response and response.type == "register_confirm" and response.data.success then
         jobsComputerId = jobs.id
         print("[OK] Registered with Jobs Computer")
         return true
