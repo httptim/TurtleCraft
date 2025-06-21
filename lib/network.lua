@@ -39,8 +39,9 @@ function network.initialize(computerType)
         end
     end
     
-    -- Register protocol
-    rednet.host(PROTOCOL, computerType .. "_" .. os.getComputerID())
+    -- Register this computer with rednet hosting
+    -- The hostname is what rednet.lookup will search for
+    rednet.host(PROTOCOL, computerType)
     
     return success
 end
@@ -102,38 +103,40 @@ end
 -- Discover computers on the network
 function network.discover(computerType, timeout)
     timeout = timeout or 2
+    
+    -- Use rednet.lookup to find computers hosting the protocol
+    local results = {rednet.lookup(PROTOCOL, computerType)}
+    
     local computers = {}
-    
-    -- Send discovery broadcast
-    network.broadcast("discover", {type = computerType})
-    
-    -- Collect responses
-    local timer = os.startTimer(timeout)
-    while true do
-        local event, p1, p2, p3 = os.pullEvent()
+    for _, id in ipairs(results) do
+        -- Get more info about each computer
+        network.send(id, "info_request", {})
+        local senderId, response = network.receive(timeout)
         
-        if event == "timer" and p1 == timer then
-            break
-        elseif event == "rednet_message" then
-            local senderId, message = p1, p2
-            if message and type(message) == "table" and message.type == "discover_response" then
-                table.insert(computers, {
-                    id = senderId,
-                    type = message.data.type,
-                    name = message.data.name
-                })
-            end
+        if senderId == id and response and response.type == "info_response" then
+            table.insert(computers, {
+                id = id,
+                type = computerType,
+                name = response.data.name or (computerType .. "_" .. id)
+            })
+        else
+            -- Fallback if no response
+            table.insert(computers, {
+                id = id,
+                type = computerType,
+                name = computerType .. "_" .. id
+            })
         end
     end
     
     return computers
 end
 
--- Respond to discovery requests
-function network.handleDiscovery(computerType, computerName)
+-- Handle info requests for discovery
+function network.handleInfoRequest(computerType, computerName)
     return function(senderId, message)
-        if message.type == "discover" then
-            network.send(senderId, "discover_response", {
+        if message.type == "info_request" then
+            network.send(senderId, "info_response", {
                 type = computerType,
                 name = computerName or (computerType .. "_" .. os.getComputerID())
             })

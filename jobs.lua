@@ -103,9 +103,9 @@ local function main()
         if event == "rednet_message" then
             local senderId, message = p1, p2
             if message and type(message) == "table" then
-                -- Handle discovery
-                local discoveryHandler = network.handleDiscovery(COMPUTER_TYPE, "JobsComputer")
-                discoveryHandler(senderId, message)
+                -- Handle info requests
+                local infoHandler = network.handleInfoRequest(COMPUTER_TYPE, "JobsComputer")
+                infoHandler(senderId, message)
                 
                 -- Handle turtle registration
                 handleTurtleRegistration(senderId, message)

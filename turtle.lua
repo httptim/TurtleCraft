@@ -116,9 +116,9 @@ local function main()
         if event == "rednet_message" then
             local senderId, message = p1, p2
             if message and type(message) == "table" and senderId == jobsComputerId then
-                -- Handle discovery
-                local discoveryHandler = network.handleDiscovery(COMPUTER_TYPE, turtleName)
-                discoveryHandler(senderId, message)
+                -- Handle info requests
+                local infoHandler = network.handleInfoRequest(COMPUTER_TYPE, turtleName)
+                infoHandler(senderId, message)
                 
                 -- Handle commands from Jobs Computer
                 if message.type == "ping" then
